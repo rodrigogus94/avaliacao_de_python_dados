@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# STREAMLIT COM MAPA INTERATIVO FOLIUM - VERSÃO COM LAYOUT MELHORADO E CONTROLES DE MAPA EXPANDIDOS
+# STREAMLIT COM MAPA INTERATIVO FOLIUM - VERSÃO COM CONTROLE ÚNICO DE DIMENSÕES DO MAPA CORRIGIDO
 
 import streamlit as st
 import pandas as pd
@@ -1200,7 +1200,7 @@ class DataAnalyzer:
         return df_rodovias.sort_values("Acidentes", ascending=False)
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL STREAMLIT - VERSÃO COM LAYOUT MELHORADO E CONTROLES DE MAPA EXPANDIDOS
+# FUNÇÃO PRINCIPAL STREAMLIT - VERSÃO COM CONTROLE CORRIGIDO DE DIMENSÕES DO MAPA
 # ==============================================================================
 def main():
     st.set_page_config(
@@ -1267,7 +1267,7 @@ def main():
     df, estados_coords = load_data()
 
     # ==============================================================================
-    # BARRA LATERAL COM FILTROS ROBUSTOS E CONTROLES DE MAPA EXPANDIDOS
+    # BARRA LATERAL COM FILTROS ROBUSTOS E CONTROLE CORRIGIDO DE DIMENSÕES DO MAPA
     # ==============================================================================
 
     st.sidebar.title("⚙️ Configurações e Filtros")
@@ -1316,35 +1316,34 @@ def main():
     autor = st.sidebar.text_input("Autor:", "Equipe de Análise")
 
     # ==============================================================================
-    # SEÇÃO EXPANDIDA PARA CONTROLES DE MAPA
+    # SEÇÃO EXPANDIDA PARA CONTROLE CORRIGIDO DE DIMENSÕES DO MAPA
     # ==============================================================================
-    st.sidebar.markdown("### 🗺️ Controles de Dimensões do Mapa")
+    st.sidebar.markdown("### 🗺️ Controle de Dimensões do Mapa")
     
-    # Sliders expandidos para maior controle
-    col1, col2 = st.sidebar.columns(2)
+    # CORREÇÃO: Slider único para controlar apenas a ALTURA do mapa
+    altura_mapa = st.sidebar.slider(
+        "Altura do Mapa (px)", 
+        min_value=400, 
+        max_value=1200, 
+        value=700,
+        step=50,
+        help="Controla a altura do mapa interativo"
+    )
     
-    with col1:
-        altura_mapa_completo = st.slider(
-            "Altura (px)", 
-            min_value=400, 
-            max_value=1200, 
-            value=700,
-            step=50,
-            help="Controla a altura vertical do mapa interativo"
-        )
-    
-    with col2:
-        amostra_mapa = st.slider(
-            "Amostra Heatmap", 
-            min_value=500, 
-            max_value=5000, 
-            value=1500,
-            step=100,
-            help="Número de pontos usados no mapa de calor"
-        )
+    # CORREÇÃO: Removemos o controle de largura e usamos CSS para largura responsiva
+    # O mapa ocupará 100% da largura disponível do contêiner
     
     # Controles adicionais para o mapa
     st.sidebar.markdown("#### 🎛️ Configurações Avançadas")
+    
+    amostra_mapa = st.sidebar.slider(
+        "Amostra Heatmap", 
+        min_value=500, 
+        max_value=5000, 
+        value=1500,
+        step=100,
+        help="Número de pontos usados no mapa de calor"
+    )
     
     zoom_inicial = st.sidebar.slider(
         "Zoom Inicial do Mapa",
@@ -1426,9 +1425,12 @@ def main():
                 mapa_completo = analyzer.create_complete_logistics_map(
                     df_filtrado,
                     sample_size=amostra_mapa,
-                    map_height=altura_mapa_completo
+                    map_height=altura_mapa
                 )
-                folium_static(mapa_completo, height=altura_mapa_completo)
+                
+                # CORREÇÃO: Usando folium_static diretamente com a altura especificada
+                # O mapa ocupará automaticamente 100% da largura do contêiner
+                folium_static(mapa_completo, height=altura_mapa)
         
         with col_info:
             st.markdown(f"#### Resumo do Período")
@@ -1491,15 +1493,115 @@ def main():
     with tab3:
         st.markdown("## 📈 Métricas e Análises Consolidadas")
 
+        # CORREÇÃO: Verificar se as tabelas existem antes de tentar exibi-las
         if selecoes["include_metrics"]:
             st.markdown("### 📊 Métricas Gerais do Período")
-            tabela = analyzer.create_metrics_table()
-            st.dataframe(tabela, width=True)
+            try:
+                tabela_metrics = analyzer.create_metrics_table()
+                if not tabela_metrics.empty:
+                    st.dataframe(tabela_metrics, use_container_width=True)
+                else:
+                    st.info("⚠️ Não há dados disponíveis para gerar a tabela de métricas.")
+            except Exception as e:
+                st.error(f"❌ Erro ao gerar tabela de métricas: {str(e)}")
 
         if selecoes["include_highways"]:
             st.markdown("### 🛣️ Ranking das Rodovias Mais Perigosas")
-            tabela = analyzer.create_highways_table()
-            st.dataframe(tabela, width=True)
+            try:
+                tabela_highways = analyzer.create_highways_table()
+                if not tabela_highways.empty:
+                    st.dataframe(tabela_highways, use_container_width=True)
+                    
+                    # Adicionar análise adicional das rodovias
+                    st.markdown("#### 📋 Análise das Rodovias Mais Críticas")
+                    
+                    if not tabela_highways.empty:
+                        # Rodovia com maior número de acidentes
+                        rodovia_mais_acidentes = tabela_highways.iloc[0]['Rodovia']
+                        acidentes_rodovia = tabela_highways.iloc[0]['Acidentes']
+                        
+                        # Rodovia com maior taxa de mortalidade
+                        rodovia_mais_mortal = tabela_highways.loc[tabela_highways['Taxa Mortalidade (%)'].idxmax()]
+                        nome_rodovia_mortal = rodovia_mais_mortal['Rodovia']
+                        taxa_mortal = rodovia_mais_mortal['Taxa Mortalidade (%)']
+                        
+                        col_analise1, col_analise2 = st.columns(2)
+                        
+                        with col_analise1:
+                            st.markdown(f"""
+                            <div class="info-card">
+                                <strong>🚨 Rodovia com Mais Acidentes</strong><br>
+                                {rodovia_mais_acidentes}<br>
+                                <strong>{acidentes_rodovia:,}</strong> acidentes registrados
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        with col_analise2:
+                            st.markdown(f"""
+                            <div class="info-card">
+                                <strong>💀 Rodovia Mais Perigosa</strong><br>
+                                {nome_rodovia_mortal}<br>
+                                <strong>{taxa_mortal:.2f}%</strong> taxa de mortalidade
+                            </div>
+                            """, unsafe_allow_html=True)
+                else:
+                    st.info("⚠️ Não há dados disponíveis para gerar o ranking de rodovias.")
+            except Exception as e:
+                st.error(f"❌ Erro ao gerar ranking de rodovias: {str(e)}")
+
+        # Adicionar mais análises na aba de métricas
+        st.markdown("---")
+        st.markdown("### 📈 Análises Adicionais")
+        
+        col_add1, col_add2 = st.columns(2)
+        
+        with col_add1:
+            # Análise por tipo de acidente
+            st.markdown("#### 📊 Tipos de Acidente Mais Frequentes")
+            tipos_analise = df_filtrado['tipo_acidente'].value_counts().head(5)
+            if not tipos_analise.empty:
+                for i, (tipo, quantidade) in enumerate(tipos_analise.items()):
+                    porcentagem = (quantidade / len(df_filtrado)) * 100
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        {i+1}. <strong>{tipo}</strong><br>
+                        {quantidade:,} ocorrências ({porcentagem:.1f}%)
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("Nenhum dado disponível para análise de tipos de acidente.")
+        
+        with col_add2:
+            # Análise por período do dia
+            st.markdown("#### ⏰ Distribuição por Horário")
+            if 'horario' in df_filtrado.columns:
+                # Extrair hora do horário
+                df_filtrado['hora'] = df_filtrado['horario'].str.split(':').str[0].astype(int)
+                
+                # Classificar por período do dia
+                def classificar_periodo(hora):
+                    if 6 <= hora < 12:
+                        return "Manhã (6h-12h)"
+                    elif 12 <= hora < 18:
+                        return "Tarde (12h-18h)"
+                    elif 18 <= hora < 24:
+                        return "Noite (18h-24h)"
+                    else:
+                        return "Madrugada (0h-6h)"
+                
+                df_filtrado['periodo'] = df_filtrado['hora'].apply(classificar_periodo)
+                periodos_analise = df_filtrado['periodo'].value_counts()
+                
+                for periodo, quantidade in periodos_analise.items():
+                    porcentagem = (quantidade / len(df_filtrado)) * 100
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <strong>{periodo}</strong><br>
+                        {quantidade:,} acidentes ({porcentagem:.1f}%)
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("Dados de horário não disponíveis.")
 
     with tab4:
         st.markdown("## 📋 Resumo Executivo")
