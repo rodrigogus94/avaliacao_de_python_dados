@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# STREAMLIT COM MAPA INTERATIVO FOLIUM - VERSÃO COM CONTROLE ÚNICO DE DIMENSÕES DO MAPA CORRIGIDO
+# STREAMLIT COM MAPA INTERATIVO FOLIUM - VERSÃO COM RELATÓRIO EXPANDIDO
 
 import streamlit as st
 import pandas as pd
@@ -143,10 +143,10 @@ def parse_coordinate(coord):
         return None
 
 # ==============================================================================
-# CLASSES DE ANÁLISE E GERAÇÃO DE RELATÓRIOS - VERSÃO DOCX
+# CLASSES DE ANÁLISE E GERAÇÃO DE RELATÓRIOS - VERSÃO DOCX EXPANDIDA
 # ==============================================================================
 class DOCXReportGenerator:
-    """Gera o relatório no formato Microsoft Word (.docx)"""
+    """Gera o relatório no formato Microsoft Word (.docx) com seções expandidas"""
     def __init__(self):
         # Inicializa o documento Word
         self.document = Document()
@@ -215,67 +215,126 @@ class DOCXReportGenerator:
         buffer.seek(0)
         return buffer
 
-    def build_report(self, analyzer, selections, author, resumo_executivo, insights, figuras_graficos, figuras_mapas):
-        """Constrói o relatório DOCX"""
+    def build_report(self, analyzer, selections, metadata, resumo_executivo, 
+                    pre_processamento, conclusoes, referencias, 
+                    figuras_graficos, figuras_mapas):
+        """Constrói o relatório DOCX expandido"""
 
-        # Cabeçalho
-        self.add_heading("RELATÓRIO EXECUTIVO - ANÁLISE DE ACIDENTES RODOVIÁRIOS", 1)
-        self.add_paragraph(f"<b>Autor:</b> {author}")
-        self.add_paragraph(f"<b>Data de geração:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        self.add_paragraph(f"<b>Período analisado:</b> {analyzer.df['ano'].min()} - {analyzer.df['ano'].max()}")
+        # ==================== CAPA E IDENTIFICAÇÃO ====================
+        self.add_heading("RELATÓRIO DE ANÁLISE DE ACIDENTES RODOVIÁRIOS", 0)
+        self.add_paragraph(" ")
+        self.add_paragraph(" ")
 
-        # Resumo Executivo
-        self.add_heading("RESUMO EXECUTIVO", 2)
+        # Identificação
+        self.add_heading("1. IDENTIFICAÇÃO", 1)
+        self.add_paragraph(f"<b>Equipe/Autor(es):</b> {metadata['autor']}")
+        self.add_paragraph(f"<b>Data de Entrega:</b> {metadata['data_entrega']}")
+        self.add_paragraph(f"<b>Período Analisado:</b> {analyzer.df['ano'].min()} - {analyzer.df['ano'].max()}")
+
+        # ==================== BASE DE DADOS ====================
+        self.add_heading("2. BASE DE DADOS ESCOLHIDA", 1)
+        self.add_paragraph(f"<b>Fonte:</b> {metadata['fonte_dados']}")
+        self.add_paragraph(f"<b>Título da Base:</b> {metadata['titulo_base']}")
+        self.add_paragraph(f"<b>Link de Acesso:</b> {metadata['link_acesso']}")
+        self.add_paragraph(f"<b>Descrição:</b> {metadata['descricao_base']}")
+        self.add_paragraph(f"<b>Contexto:</b> {metadata['contexto_base']}")
+
+        # ==================== ESTRUTURA DOS DADOS ====================
+        self.add_heading("3. ESTRUTURA DOS DADOS", 1)
+        self.add_paragraph(f"<b>Formato:</b> {metadata['formato_dados']}")
+        self.add_paragraph(f"<b>Quantidade de Registros:</b> {len(analyzer.df):,}")
+        self.add_paragraph(f"<b>Quantidade de Atributos (colunas):</b> {len(analyzer.df.columns)}")
+        
+        self.add_heading("Descrição das Variáveis Principais", 2)
+        descricao_variaveis = [
+            ["Variável", "Descrição"],
+            ["id", "Identificador único do acidente"],
+            ["uf", "Unidade da Federação onde ocorreu o acidente"],
+            ["tipo_acidente", "Classificação do tipo de acidente"],
+            ["mortos", "Número de vítimas fatais"],
+            ["feridos_graves", "Número de feridos graves"],
+            ["feridos_leves", "Número de feridos leves"],
+            ["ilesos", "Número de pessoas ilesas"],
+            ["br", "Identificação da rodovia federal"],
+            ["km", "Quilômetro onde ocorreu o acidente"],
+            ["data_inversa", "Data do acidente (YYYY-MM-DD)"],
+            ["ano", "Ano do acidente"],
+            ["mes", "Mês do acidente"],
+            ["dia", "Dia do acidente"],
+            ["horario", "Horário do acidente"],
+            ["dia_semana", "Dia da semana do acidente"],
+            ["latitude", "Coordenada geográfica - latitude"],
+            ["longitude", "Coordenada geográfica - longitude"]
+        ]
+        self.add_table(descricao_variaveis)
+
+        # ==================== PRÉ-PROCESSAMENTO ====================
+        self.add_heading("4. PRÉ-PROCESSAMENTO", 1)
+        self.add_paragraph(pre_processamento)
+
+        # ==================== RESUMO EXECUTIVO ====================
+        self.add_heading("5. RESUMO EXECUTIVO", 1)
         self.add_paragraph(resumo_executivo)
 
-        # Métricas Principais
+        # ==================== MÉTRICAS PRINCIPAIS ====================
         if selections.get("include_metrics"):
-            self.add_heading("PRINCIPAIS MÉTRICAS", 2)
+            self.add_heading("6. PRINCIPAIS MÉTRICAS", 1)
             tabela_metricas = analyzer.create_metrics_table()
             data_metricas = [list(tabela_metricas.columns)] + tabela_metricas.values.tolist()
             self.add_table(data_metricas)
 
-        # Análises Gráficas (Salvamento de figuras a partir de buffers)
+        # ==================== ANÁLISES GRÁFICAS ====================
+        self.add_heading("7. VISUALIZAÇÕES E ANÁLISES", 1)
+        
+        # Salvar figuras em arquivos temporários e adicionar ao documento
         for key, fig in figuras_graficos.items():
             if key == "evolution" and selections.get("include_evolution"):
-                self.add_heading("EVOLUÇÃO TEMPORAL", 2)
+                self.add_heading("Evolução Temporal dos Acidentes", 2)
                 self.add_paragraph("A análise temporal mostra a evolução dos acidentes ao longo dos anos, permitindo identificar tendências e sazonalidades.")
             elif key == "states" and selections.get("include_states"):
-                self.add_heading("ANÁLISE POR ESTADO", 2)
+                self.add_heading("Análise Comparativa por Estado", 2)
                 self.add_paragraph("Comparativo entre estados brasileiros considerando volume de acidentes e taxas de mortalidade.")
             elif key == "types" and selections.get("include_types"):
-                self.add_heading("TIPOS DE ACIDENTE", 2)
+                self.add_heading("Distribuição por Tipo de Acidente", 2)
                 self.add_paragraph("Distribuição percentual dos diferentes tipos de acidentes ocorridos no período analisado.")
             elif key == "weekday" and selections.get("include_weekday"):
-                self.add_heading("PADRÃO SEMANAL DE ACIDENTES", 2)
+                self.add_heading("Padrão Semanal de Acidentes", 2)
                 self.add_paragraph("Distribuição dos acidentes por dia da semana, útil para planejamento logístico e operacional.")
 
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
-                # O parâmetro bbox_inches='tight' garante o corte correto
                 fig.savefig(tmpfile.name, dpi=300, bbox_inches='tight')
-                # A imagem será adicionada com a largura padronizada (5.0*Inches)
                 self.add_image(tmpfile.name)
 
-        # Análise de Rodovias
+        # ==================== ANÁLISE DE RODOVIAS ====================
         if selections.get("include_highways"):
-            self.add_heading("RANKING DE RODOVIAS", 2)
+            self.add_heading("Ranking de Rodovias Mais Perigosas", 2)
             self.add_paragraph("Identificação das rodovias com maior incidência de acidentes e maiores taxas de mortalidade.")
             tabela_rodovias = analyzer.create_highways_table()
             data_rodovias = [list(tabela_rodovias.columns)] + tabela_rodovias.values.tolist()
             self.add_table(data_rodovias)
 
-        # Mapas (Nota: A captura de Folium em PDF é complexa e requer ferramentas externas)
-        if selections.get("include_map") or selections.get("include_complete_map"):
-            self.add_heading("MAPA DE DISTRIBUIÇÃO GEOGRÁFICA (Visualização na Plataforma)", 2)
-            self.add_paragraph("Os mapas interativos não podem ser embutidos em documentos Word ou PDF de forma nativa e interativa. Consulte a plataforma para a visualização completa e dinâmica.")
+        # ==================== MAPAS ====================
+        if selections.get("include_complete_map"):
+            self.add_heading("Análise Geoespacial", 2)
+            self.add_paragraph("Os mapas interativos não podem ser embutidos em documentos Word ou PDF de forma nativa e interativa. Consulte a plataforma para a visualização completa e dinâmica dos mapas de calor e distribuição geográfica.")
 
-        # Insights e Recomendações
-        self.add_heading("INSIGHTS E RECOMENDAÇÕES ESTRATÉGICAS", 2)
-        self.add_paragraph(insights)
+        # ==================== CONCLUSÕES ====================
+        self.add_heading("8. CONCLUSÕES", 1)
+        self.add_paragraph(conclusoes)
 
-        # Conclusão
-        self.add_heading("CONCLUSÃO", 2)
-        self.add_paragraph("Este relatório fornece uma visão abrangente da situação dos acidentes rodoviários, identificando padrões, áreas críticas e oportunidades de intervenção para redução de acidentes e melhoria da segurança viária.")
+        # ==================== REFERÊNCIAS ====================
+        self.add_heading("9. REFERÊNCIAS", 1)
+        self.add_paragraph(referencias)
+
+        # ==================== INFORMAÇÕES COMPLEMENTARES ====================
+        self.add_heading("INFORMAÇÕES COMPLEMENTARES", 1)
+        self.add_paragraph("Links para recursos adicionais:")
+        self.add_paragraph("- GitHub: https://github.com/[usuário]/[repositório]")
+        self.add_paragraph("- Google Colab: https://colab.research.google.com/drive/[link]")
+        self.add_paragraph("- Power BI: [link para dashboard Power BI]")
+        self.add_paragraph("- Dataset: [link para arquivo no Google Drive]")
+        
+        self.add_paragraph(f"<b>Data de geração do relatório:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
 
 class DataAnalyzer:
@@ -569,9 +628,9 @@ class DataAnalyzer:
 
         return m
 
-    # FUNÇÃO DE MAPA COMPLETO ATUALIZADA COM O CÓDIGO DO MAPA.PY E MARCADORES POSITIVOS
-    def create_complete_logistics_map(_self, df_filtrado, sample_size=1000, map_height=600): # Adicionado sample_size
-        """Mapa completo com todas as funcionalidades de logística e análise, baseado no Mapa.py avançado"""
+    # FUNÇÃO DE MAPA COMPLETO ATUALIZADA
+    def create_complete_logistics_map(_self, df_filtrado, sample_size=1000, map_height=600):
+        """Mapa completo com todas as funcionalidades de logística e análise"""
 
         # Mapeamento de variáveis
         df_enriched = df_filtrado.copy()
@@ -586,12 +645,12 @@ class DataAnalyzer:
         estados_acidentes["taxa_mortalidade"] = (
             estados_acidentes["mortos"] / estados_acidentes["id"]
         ) * 100
-        estados_acidentes['taxa_mortalidade'] = estados_acidentes['taxa_mortalidade'].fillna(0) # Tratar NaN
+        estados_acidentes['taxa_mortalidade'] = estados_acidentes['taxa_mortalidade'].fillna(0)
 
         m2 = folium.Map(
             location=[-15.77972, -47.92972],
             zoom_start=4,
-            tiles="Esri_WorldImagery", # Tile padrão
+            tiles="Esri_WorldImagery",
             control_scale=True,
             prefer_canvas=True
         )
@@ -627,11 +686,9 @@ class DataAnalyzer:
                 attr=config['attr']
             ).add_to(m2)
 
-        # <<< INICIALIZAÇÃO DOS FEATURE GROUPS E CLUSTER >>>
-        # PONTO 3 CORRIGIDO: Heatmap agora inicia VISÍVEL (show=True)
+        # Inicialização dos Feature Groups
         fg_heatmap = folium.FeatureGroup(name='🔥 Mapa de Calor (Densidade)', show=True)
         marker_cluster_estados = plugins.MarkerCluster(name="📍 Estados (Agrupados)").add_to(m2)
-
 
         # 3. Choropleth Map
         geojson_url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
@@ -640,13 +697,7 @@ class DataAnalyzer:
             response = requests.get(geojson_url)
             geojson_data = response.json()
         except Exception:
-            # Tenta uma alternativa caso a principal falhe
-            alternative_url = "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-100-mun.json"
-            try:
-                response = requests.get(alternative_url)
-                geojson_data = response.json()
-            except Exception:
-                pass
+            pass
 
         if geojson_data is not None:
             folium.Choropleth(
@@ -661,7 +712,7 @@ class DataAnalyzer:
                 legend_name='Taxa de Mortalidade (%) - 2007-2023',
                 bins=6,
                 nan_fill_color='lightgray',
-                show=False # Inicia desativado para não poluir
+                show=False
             ).add_to(m2)
 
         # Lógica do Mapa de Calor (Heatmap)
@@ -680,8 +731,7 @@ class DataAnalyzer:
             ).add_to(fg_heatmap)
         fg_heatmap.add_to(m2)
 
-
-        # 4. Marcadores de Mortalidade por Estado (CircleMarker e agora também MarkerCluster)
+        # 4. Marcadores de Mortalidade por Estado
         ranking_mortalidade = estados_acidentes['taxa_mortalidade'].rank(method='dense', ascending=False)
 
         # 5. Adicionar Feature Group para Rotas Seguras
@@ -721,18 +771,15 @@ class DataAnalyzer:
                     icon=folium.Icon(color=cor_cluster, icon=icon_type_cluster, prefix='fa'),
                 ).add_to(marker_cluster_estados)
 
-
                 if taxa > 3:
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "darkred", "MUITO ALTO", "🚨 EVITAR - Alto risco para operações logísticas", "#ff6b6b"
                 elif taxa > 2:
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "red", "ALTO", "⚠️ CUIDADO - Redobrar atenção nas operações", "#ffa726"
                 elif taxa > 1:
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "orange", "MÉDIO", "📋 ATENÇÃO - Implementar protocolos de segurança", "#ffd93d"
-                # Marcar Estados com zero mortalidade na camada de Rotas Seguras
                 elif taxa == 0:
                     icon_color_seguro, risco_seguro, recomendacao_segura, cor_recomendacao_segura = "green", "BAIXO", "✅ ADEQUADO - Rotas Seguras (Mortalidade Zero)", "#6bcf7f"
 
-                    # Adicionar como marcador na camada de Rotas Seguras
                     popup_seguro = f"""
                     <div style="font-family: Arial; min-width: 250px; background: white; color: black; padding: 15px; border-radius: 8px; border: 2px solid green;">
                         <h4 style="margin: 0 0 10px 0; color: #2ecc71;">✅ {uf} - ROTA SEGURA (ESTADO)</h4>
@@ -753,10 +800,10 @@ class DataAnalyzer:
                     ).add_to(fg_rotas_seguras)
 
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "lightgreen", "BAIXO", "✅ ADEQUADO - Condições aceitáveis para logística", "#6bcf7f"
-                else: # Taxa entre 0 e 1% (Baixo Risco)
+                else:
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "lightgreen", "BAIXO", "✅ ADEQUADO - Condições aceitáveis para logística", "#6bcf7f"
 
-                # Contexto Logístico (Baseado no Mapa.py)
+                # Contexto Logístico
                 if uf in ['SP', 'RJ', 'MG', 'ES']:
                     contexto_logistica = "Região com alta densidade logística - múltiplas rotas alternativas disponíveis"
                 elif uf in ['PR', 'SC', 'RS']:
@@ -796,7 +843,6 @@ class DataAnalyzer:
                 </div>
                 """
 
-                # Crie um FeatureGroup para os Círculos, para poder ligar/desligar
                 fg_circulos_risco = folium.FeatureGroup(name='⭕ Estados (Círculos de Risco)', show=True).add_to(m2)
                 folium.CircleMarker(
                     location=[lat, lon],
@@ -810,7 +856,6 @@ class DataAnalyzer:
                 ).add_to(fg_circulos_risco)
 
         fg_rotas_seguras.add_to(m2)
-
 
         # 6. Processar Coordenadas e Adicionar Acidentes Graves (Marker)
         df_coords = df_enriched.copy()
@@ -829,6 +874,7 @@ class DataAnalyzer:
             df_enriched[coluna_br] = df_enriched[coluna_br].fillna('Não informada').astype(str)
             df_enriched[coluna_km] = df_enriched[coluna_km].fillna('Não informado').astype(str)
 
+            # CORREÇÃO AQUI: usar coords_validas em vez de coidentes_graves
             acidentes_graves = coords_validas[
                 (coords_validas['mortos'] > 0) |
                 (coords_validas['feridos_graves'] > 0)
@@ -846,7 +892,6 @@ class DataAnalyzer:
 
                     if pd.isna(lat) or pd.isna(lon): continue
 
-                    # Limpar valores de BR e KM
                     br = str(acidente[coluna_br]).split('.')[0] if '.' in str(acidente[coluna_br]) else str(acidente[coluna_br])
                     km = str(acidente[coluna_km]).split('.')[0] if '.' in str(acidente[coluna_km]) else str(acidente[coluna_km])
 
@@ -914,235 +959,13 @@ class DataAnalyzer:
 
             fg_acidentes_graves.add_to(m2)
 
-
-        # 7. Camada: Todas as Rodovias (Marker com análise logística)
-        if coluna_br in df_enriched.columns:
-            df_enriched[coluna_br] = df_enriched[coluna_br].fillna('Não informada').astype(str)
-
-            rodovias_acidentes = df_enriched.groupby(coluna_br).agg({
-                'id': 'count',
-                'mortos': 'sum',
-                'feridos_graves': 'sum',
-                'feridos_leves': 'sum',
-                'ilesos': 'sum'
-            }).reset_index()
-
-            rodovias_acidentes['taxa_mortalidade'] = (rodovias_acidentes['mortos'] / rodovias_acidentes['id']) * 100
-            rodovias_acidentes['taxa_mortalidade'] = rodovias_acidentes['taxa_mortalidade'].fillna(0)
-
-            rodovias_acidentes['categoria_risco'] = rodovias_acidentes['taxa_mortalidade'].apply(
-                lambda x: 'MUITO ALTO' if x > 3 else 'ALTO' if x > 2 else 'MODERADO' if x > 1 else 'BAIXO'
-            )
-
-            rodovias_acidentes['recomendacao_logistica'] = rodovias_acidentes['categoria_risco'].apply(
-                lambda x: '🚨 EVITAR' if x == 'MUITO ALTO' else
-                         '⚠️ CUIDADO EXTREMO' if x == 'ALTO' else
-                         '📋 ATENÇÃO' if x == 'MODERADO' else
-                         '✅ ADEQUADO'
-            )
-
-            fg_todas_rodovias = folium.FeatureGroup(name='🛣️ Todas as Rodovias (Risco Geral)', show=True)
-
-            for idx, rodovia in rodovias_acidentes.iterrows():
-                try:
-                    br = str(rodovia[coluna_br]).split('.')[0] if '.' in str(rodovia[coluna_br]) else str(rodovia[coluna_br])
-                    if br == 'Não informada': continue
-
-                    acidentes = int(rodovia['id'])
-                    mortos = int(rodovia['mortos'])
-                    taxa_mortalidade = float(rodovia['taxa_mortalidade'])
-                    recomendacao = rodovia['recomendacao_logistica']
-                    categoria = rodovia['categoria_risco']
-
-                    if taxa_mortalidade > 3:
-                        cor_rodovia, risco_rodovia, cor_bg = 'darkred', "MUITO ALTA", "#ffebee"
-                    elif taxa_mortalidade > 2:
-                        cor_rodovia, risco_rodovia, cor_bg = 'red', "ALTA", "#fff3e0"
-                    elif taxa_mortalidade > 1:
-                        cor_rodovia, risco_rodovia, cor_bg = 'orange', "MÉDIA", "#fff8e1"
-                    # Lógica para rotas seguras (Zero Mortalidade)
-                    elif taxa_mortalidade == 0:
-                        # Adicionar marcador positivo na camada de rotas seguras (fg_rotas_seguras)
-                        acidentes_br = coords_validas[coords_validas[coluna_br] == br]
-                        if len(acidentes_br) > 0:
-                            lat_media = float(acidentes_br['lat_clean'].mean())
-                            lon_media = float(acidentes_br['lon_clean'].mean())
-
-                            popup_seguro = f"""
-                            <div style="font-family: Arial; min-width: 250px; background: white; color: black; padding: 15px; border-radius: 8px; border: 2px solid green;">
-                                <h4 style="margin: 0 0 10px 0; color: #2ecc71;">✅ BR {br} - ROTA SEGURA (RODOVIA)</h4>
-                                <div style="background: #2ecc71; color: white; padding: 5px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
-                                    <strong>Taxa de Mortalidade: 0.00%</strong>
-                                </div>
-                                <table style="width: 100%; font-size: 12px;">
-                                    <tr><td>📊 Acidentes:</td><td style="text-align: right;"><strong>{acidentes:,}</strong></td></tr>
-                                    <tr><td>📦 Recomendação Logística:</td><td style="text-align: right; color: #2ecc71;"><strong>RISCO BAIXO / ADEQUADO</strong></td></tr>
-                                </table>
-                            </div>
-                            """
-                            folium.Marker(
-                                location=[lat_media, lon_media],
-                                popup=folium.Popup(popup_seguro, max_width=300),
-                                tooltip=f"✅ BR {br}: Rota Segura (0 mortes) | {acidentes:,} acidentes",
-                                icon=folium.Icon(color='green', icon='fa-thumbs-up', prefix='fa'),
-                            ).add_to(fg_rotas_seguras)
-
-                        # Usar a cor de risco baixo para a camada de Rodovias Geral (fg_todas_rodovias)
-                        cor_rodovia, risco_rodovia, cor_bg = 'green', "BAIXA", "#e8f5e8"
-
-                    else: # Taxa entre 0 e 1% (Baixo Risco)
-                        cor_rodovia, risco_rodovia, cor_bg = 'green', "BAIXA", "#e8f5e8"
-
-
-                    acidentes_br = coords_validas[coords_validas[coluna_br] == br]
-
-                    if len(acidentes_br) > 0:
-                        lat_media = float(acidentes_br['lat_clean'].mean())
-                        lon_media = float(acidentes_br['lon_clean'].mean())
-
-                        logistica_impacto = (
-                            "Alto impacto nas operações - buscar alternativas" if taxa_mortalidade > 2 else
-                            "Impacto moderado - avaliar custo-benefício" if taxa_mortalidade > 1 else
-                            "Baixo impacto - condições aceitáveis para logística"
-                        )
-
-                        popup_content = f"""
-                        <div style="font-family: Arial; min-width: 320px; background: {cor_bg}; padding: 15px; border-radius: 8px; border: 2px solid {cor_rodovia};">
-                            <h4 style="margin: 0 0 10px 0; color: {cor_rodovia};">🛣️ BR {br}</h4>
-                            <div style="background: {cor_rodovia}; color: white; padding: 8px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
-                                <strong>PERICULOSIDADE: {risco_rodovia}</strong>
-                            </div>
-
-                            <div style="background: #2196f3; color: white; padding: 6px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
-                                <strong>📦 {recomendacao}</strong>
-                            </div>
-
-                            <table style="width: 100%; font-size: 12px;">
-                                <tr><td>📊 Total de Acidentes:</td><td style="text-align: right;"><strong>{acidentes:,}</strong></td></tr>
-                                <tr><td>💀 Mortes:</td><td style="text-align: right;"><strong>{mortos:,}</strong></td></tr>
-                                <tr><td>📈 Taxa de Mortalidade:</td><td style="text-align: right;"><strong>{taxa_mortalidade:.2f}%</strong></td></tr>
-                            </table>
-
-                            <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px;">
-                                <strong>🚚 IMPACTO LOGÍSTICO GERAL:</strong><br>
-                                <span style="font-size: 11px;">{logistica_impacto}</span>
-                            </div>
-                        </div>
-                        """
-                        # Adicionar o Marker apenas se não for uma rodovia 'Não informada'
-                        folium.Marker(
-                            location=[lat_media, lon_media],
-                            popup=folium.Popup(popup_content, max_width=400),
-                            tooltip=f"🛣️ BR {br}: {acidentes:,} acidentes | {taxa_mortalidade:.2f}% mortalidade | 📦 {recomendacao}",
-                            icon=folium.Icon(color=cor_rodovia, icon='fa-road', prefix='fa')
-                        ).add_to(fg_todas_rodovias)
-
-                except Exception as e:
-                    continue
-
-            fg_todas_rodovias.add_to(m2)
-
-
-        # 8. Adicionar controles interativos
+        # 7. Adicionar controles interativos
         plugins.Fullscreen(position="topright").add_to(m2)
         plugins.MiniMap(tile_layer="CartoDB positron", position="bottomright").add_to(m2)
         plugins.LocateControl(position="topright").add_to(m2)
         plugins.MeasureControl(position="topleft").add_to(m2)
 
-        # O LayerControl irá mostrar TODAS as camadas
         folium.LayerControl(collapsed=False).add_to(m2)
-
-        # 9. Título e Legenda HTML (permanecem os mesmos)
-        title_html2 = f'''
-        <div style="
-            position: fixed;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
-            background: rgba(44, 62, 80, 0.9);
-            padding: 12px 25px;
-            border: 2px solid #e74c3c;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            text-align: center;
-            backdrop-filter: blur(5px);
-        ">
-            <h4 style="margin: 0; color: white; font-size: 16px;">💀 MAPA DE MORTALIDADE + 📦 ANÁLISE DE LOGÍSTICA</h4>
-            <p style="margin: 5px 0 0 0; font-size: 12px; color: #ecf0f1;">Análise logística em todos os pontos</p>
-        </div>
-        '''
-        m2.get_root().html.add_child(folium.Element(title_html2))
-
-        legend_html2 = '''
-        <div style="
-            position: fixed;
-            bottom: 50px;
-            left: 50px;
-            width: 400px;
-            height: auto;
-            background: rgba(44, 62, 80, 0.95);
-            border: 2px solid #34495e;
-            z-index: 9999;
-            font-size: 12px;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            color: white;
-            backdrop-filter: blur(5px);
-        ">
-            <h4 style="margin: 0 0 12px 0; text-align: center; color: #e74c3c;">📊 LEGENDA + 📦 LOGÍSTICA</h4>
-
-            <div style="margin-bottom: 10px;">
-                <strong>🎯 Níveis de Mortalidade (Estados/Rodovias):</strong>
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 12px; height: 12px; background: darkred; border-radius: 50%; margin-right: 8px;"></div>
-                    <span>MUITO ALTO (>3%) - 🚨 EVITAR</span>
-                </div>
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 12px; height: 12px; background: red; border-radius: 50%; margin-right: 8px;"></div>
-                    <span>ALTO (2-3%) - ⚠️ CUIDADO EXTREMO</span>
-                </div>
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 12px; height: 12px; background: orange; border-radius: 50%; margin-right: 8px;"></div>
-                    <span>MÉDIO (1-2%) - 📋 ATENÇÃO</span>
-                </div>
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 12px; height: 12px; background: green; border-radius: 50%; margin-right: 8px;"></div>
-                    <span>BAIXO (<1%) - ✅ ADEQUADO</span>
-                </div>
-
-                <hr style="border-color: #7f8c8d; margin: 10px 0;">
-
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 15px; height: 15px; background: green; border-radius: 50%; margin-right: 8px; border: 2px solid white;"></div>
-                    <span><strong>✅ ROTA SEGURA (Mortalidade Zero)</strong></span>
-                </div>
-
-            </div>
-
-            <div style="margin-bottom: 10px;">
-                <strong>📦 IMPACTO LOGÍSTICO (Acidentes Pontuais):</strong>
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 15px; height: 15px; background: black; border-radius: 50%; margin-right: 8px;"></div>
-                    <span>🔴 PARALISAÇÃO TOTAL (Fatal)</span>
-                </div>
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 15px; height: 15px; background: red; border-radius: 50%; margin-right: 8px;"></div>
-                    <span>🟡 ALTO IMPACTO (Feridos Graves)</span>
-                </div>
-            </div>
-
-            <hr style="border-color: #7f8c8d; margin: 10px 0;">
-
-            <div style="font-size: 11px; color: #bdc3c7;">
-                <p>🎮 <strong>Como usar para Logística:</strong></p>
-                <p>• Clique em QUALQUER ponto para ver análise logística detalhada</p>
-                <p>• Use o controle de camadas para alternar <strong>Rotas Seguras</strong>, Rodovias e Acidentes Pontuais</p>
-            </div>
-        </div>
-        '''
-        m2.get_root().html.add_child(folium.Element(legend_html2))
 
         return m2
 
@@ -1194,13 +1017,11 @@ class DataAnalyzer:
             )
 
         df_rodovias = pd.DataFrame(dados)
-        df_rodovias["Taxa Mortalidade (%)"] = df_rodovias["Taxa Mortalidade (%)"].round(
-            2
-        )
+        df_rodovias["Taxa Mortalidade (%)"] = df_rodovias["Taxa Mortalidade (%)"].round(2)
         return df_rodovias.sort_values("Acidentes", ascending=False)
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL STREAMLIT - VERSÃO COM CONTROLE CORRIGIDO DE DIMENSÕES DO MAPA
+# FUNÇÃO PRINCIPAL STREAMLIT - VERSÃO COM RELATÓRIO EXPANDIDO
 # ==============================================================================
 def main():
     st.set_page_config(
@@ -1267,7 +1088,7 @@ def main():
     df, estados_coords = load_data()
 
     # ==============================================================================
-    # BARRA LATERAL COM FILTROS ROBUSTOS E CONTROLE CORRIGIDO DE DIMENSÕES DO MAPA
+    # BARRA LATERAL COM FILTROS
     # ==============================================================================
 
     st.sidebar.title("⚙️ Configurações e Filtros")
@@ -1313,14 +1134,9 @@ def main():
         return
 
     st.sidebar.markdown("---")
-    autor = st.sidebar.text_input("Autor:", "Equipe de Análise")
-
-    # ==============================================================================
-    # SEÇÃO EXPANDIDA PARA CONTROLE CORRIGIDO DE DIMENSÕES DO MAPA
-    # ==============================================================================
-    st.sidebar.markdown("### 🗺️ Controle de Dimensões do Mapa")
     
-    # CORREÇÃO: Slider único para controlar apenas a ALTURA do mapa
+    # Controles do mapa na barra lateral
+    st.sidebar.markdown("### 🗺️ Controle de Dimensões do Mapa")
     altura_mapa = st.sidebar.slider(
         "Altura do Mapa (px)", 
         min_value=400, 
@@ -1330,12 +1146,7 @@ def main():
         help="Controla a altura do mapa interativo"
     )
     
-    # CORREÇÃO: Removemos o controle de largura e usamos CSS para largura responsiva
-    # O mapa ocupará 100% da largura disponível do contêiner
-    
-    # Controles adicionais para o mapa
     st.sidebar.markdown("#### 🎛️ Configurações Avançadas")
-    
     amostra_mapa = st.sidebar.slider(
         "Amostra Heatmap", 
         min_value=500, 
@@ -1343,23 +1154,6 @@ def main():
         value=1500,
         step=100,
         help="Número de pontos usados no mapa de calor"
-    )
-    
-    zoom_inicial = st.sidebar.slider(
-        "Zoom Inicial do Mapa",
-        min_value=3,
-        max_value=8,
-        value=4,
-        help="Nível de zoom inicial do mapa (3 = mais distante, 8 = mais próximo)"
-    )
-    
-    opacidade_heatmap = st.sidebar.slider(
-        "Opacidade do Heatmap",
-        min_value=0.1,
-        max_value=1.0,
-        value=0.7,
-        step=0.1,
-        help="Controla a transparência do mapa de calor"
     )
 
     st.sidebar.markdown("---")
@@ -1380,14 +1174,14 @@ def main():
         "include_weekday": include_weekday,
         "include_highways": include_highways,
         "include_metrics": include_metrics,
-        "include_map": False, # Desativado permanentemente
+        "include_map": False,
         "include_complete_map": include_complete_map,
     }
 
     analyzer = DataAnalyzer(df_filtrado, estados_coords)
 
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["📊 Análises Gráficas", "🗺️ Mapa e Resumo", "📈 Métricas e Tabelas", "📋 Resumo Executivo"]
+        ["📊 Análises Gráficas", "🗺️ Mapa e Resumo", "📈 Métricas e Tabelas", "📋 Relatório Executivo"]
     )
 
     with tab1:
@@ -1417,7 +1211,6 @@ def main():
                 st.pyplot(fig)
 
     with tab2:
-        # Layout melhorado: informações ao lado e abaixo do mapa
         col_mapa, col_info = st.columns([3, 1])
         
         with col_mapa:
@@ -1427,16 +1220,12 @@ def main():
                     sample_size=amostra_mapa,
                     map_height=altura_mapa
                 )
-                
-                # CORREÇÃO: Usando folium_static diretamente com a altura especificada
-                # O mapa ocupará automaticamente 100% da largura do contêiner
                 folium_static(mapa_completo, height=altura_mapa)
         
         with col_info:
             st.markdown(f"#### Resumo do Período")
             st.caption(f"Análise de **{len(df_filtrado):,}** registros de **{df_filtrado['ano'].min()}** a **{df_filtrado['ano'].max()}**.")
             
-            # Métricas principais em cards compactos
             total_acidentes = len(df_filtrado)
             total_mortos = int(df_filtrado['mortos'].sum())
             total_feridos_graves = int(df_filtrado['feridos_graves'].sum())
@@ -1452,21 +1241,18 @@ def main():
             
             st.markdown(f'<div class="metric-card">📈 <strong>Taxa de Mortalidade:</strong><br>{taxa_mortalidade:.2f}%</div>', unsafe_allow_html=True)
         
-        # Informações abaixo do mapa
         st.markdown("---")
         col_rank, col_carac = st.columns(2)
         
         with col_rank:
             st.markdown("### 🏆 Rankings Geográficos")
             
-            # Top 3 Estados
             top_estados = df_filtrado['uf'].value_counts().nlargest(3)
             if not top_estados.empty:
                 st.markdown("#### 📍 Top 3 Estados")
                 for i, (estado, contagem) in enumerate(top_estados.items()):
                     st.markdown(f'<div class="info-card">{i+1}. <strong>{estado}</strong>: {contagem:,} acidentes</div>', unsafe_allow_html=True)
             
-            # Top 3 Rodovias
             top_rodovias = df_filtrado['br'].value_counts().nlargest(3)
             if not top_rodovias.empty:
                 st.markdown("#### 🛣️ Top 3 Rodovias")
@@ -1476,14 +1262,12 @@ def main():
         with col_carac:
             st.markdown("### 💥 Características dos Acidentes")
             
-            # Top 3 Tipos de Acidente
             top_tipos = df_filtrado['tipo_acidente'].value_counts().nlargest(3)
             if not top_tipos.empty:
                 st.markdown("#### 🚨 Tipos Mais Comuns")
                 for i, (tipo, contagem) in enumerate(top_tipos.items()):
                     st.markdown(f'<div class="info-card">{i+1}. <strong>{tipo}</strong></div>', unsafe_allow_html=True)
             
-            # Dia da semana com mais acidentes
             dia_mais_acidentes = df_filtrado['dia_semana'].value_counts().idxmax() if not df_filtrado.empty else "N/A"
             total_dia_mais = df_filtrado['dia_semana'].value_counts().max() if not df_filtrado.empty else 0
             
@@ -1493,7 +1277,6 @@ def main():
     with tab3:
         st.markdown("## 📈 Métricas e Análises Consolidadas")
 
-        # CORREÇÃO: Verificar se as tabelas existem antes de tentar exibi-las
         if selecoes["include_metrics"]:
             st.markdown("### 📊 Métricas Gerais do Período")
             try:
@@ -1512,15 +1295,12 @@ def main():
                 if not tabela_highways.empty:
                     st.dataframe(tabela_highways, use_container_width=True)
                     
-                    # Adicionar análise adicional das rodovias
                     st.markdown("#### 📋 Análise das Rodovias Mais Críticas")
                     
                     if not tabela_highways.empty:
-                        # Rodovia com maior número de acidentes
                         rodovia_mais_acidentes = tabela_highways.iloc[0]['Rodovia']
                         acidentes_rodovia = tabela_highways.iloc[0]['Acidentes']
                         
-                        # Rodovia com maior taxa de mortalidade
                         rodovia_mais_mortal = tabela_highways.loc[tabela_highways['Taxa Mortalidade (%)'].idxmax()]
                         nome_rodovia_mortal = rodovia_mais_mortal['Rodovia']
                         taxa_mortal = rodovia_mais_mortal['Taxa Mortalidade (%)']
@@ -1549,14 +1329,12 @@ def main():
             except Exception as e:
                 st.error(f"❌ Erro ao gerar ranking de rodovias: {str(e)}")
 
-        # Adicionar mais análises na aba de métricas
         st.markdown("---")
         st.markdown("### 📈 Análises Adicionais")
         
         col_add1, col_add2 = st.columns(2)
         
         with col_add1:
-            # Análise por tipo de acidente
             st.markdown("#### 📊 Tipos de Acidente Mais Frequentes")
             tipos_analise = df_filtrado['tipo_acidente'].value_counts().head(5)
             if not tipos_analise.empty:
@@ -1572,13 +1350,10 @@ def main():
                 st.info("Nenhum dado disponível para análise de tipos de acidente.")
         
         with col_add2:
-            # Análise por período do dia
             st.markdown("#### ⏰ Distribuição por Horário")
             if 'horario' in df_filtrado.columns:
-                # Extrair hora do horário
                 df_filtrado['hora'] = df_filtrado['horario'].str.split(':').str[0].astype(int)
                 
-                # Classificar por período do dia
                 def classificar_periodo(hora):
                     if 6 <= hora < 12:
                         return "Manhã (6h-12h)"
@@ -1604,17 +1379,74 @@ def main():
                 st.info("Dados de horário não disponíveis.")
 
     with tab4:
-        st.markdown("## 📋 Resumo Executivo")
-
-        resumo_executivo = st.text_area(
-            "Resumo Executivo (Introdução)",
-            "A análise abrange o período de {} a {}, identificando que o principal desafio de segurança viária está concentrado nas BRs 101, 116 e 040, com ênfase no tipo 'Colisão Traseira' como o mais frequente.".format(df_filtrado['ano'].min(), df_filtrado['ano'].max())
-        )
-
-        insights = st.text_area(
-            "Insights e Recomendações Estratégicas",
-            "Recomenda-se a implementação de campanhas de conscientização focadas em direção defensiva e distância de segurança, especialmente nas sextas-feiras e sábados (dias de pico de acidentes)."
-        )
+        st.markdown("## 📋 Relatório Executivo - Formulário Completo")
+        
+        # 1. IDENTIFICAÇÃO
+        st.markdown("### 1. IDENTIFICAÇÃO")
+        col_id1, col_id2 = st.columns(2)
+        with col_id1:
+            autor = st.text_input("Equipe/Autor(es):", "Equipe de Análise de Dados")
+        with col_id2:
+            data_entrega = st.date_input("Data de Entrega:", datetime.now())
+        
+        # 2. BASE DE DADOS ESCOLHIDA
+        st.markdown("### 2. BASE DE DADOS ESCOLHIDA")
+        fonte_dados = st.text_input("Fonte:", "PRF - Polícia Rodoviária Federal")
+        titulo_base = st.text_input("Título da Base:", "Acidentes Rodoviários - Brasil 2007-2023")
+        link_acesso = st.text_input("Link de Acesso:", "https://www.gov.br/prf/pt-br/acesso-a-informacao/dados-abertos/dados-abertos-da-prf")
+        descricao_base = st.text_area("Descrição:", 
+            "Base de dados oficial de acidentes rodoviários ocorridos nas rodovias federais brasileiras, contendo informações detalhadas sobre acidentes, vítimas, localização, condições climáticas e tipos de acidentes.")
+        contexto_base = st.text_area("Contexto:",
+            "Esta base é relevante para entender os padrões de acidentes rodoviários no Brasil, identificar fatores de risco, planejar políticas públicas de segurança viária e auxiliar na tomada de decisões estratégicas para redução de acidentes e mortes no trânsito.")
+        
+        # 3. ESTRUTURA DOS DADOS
+        st.markdown("### 3. ESTRUTURA DOS DADOS")
+        formato_dados = st.text_input("Formato:", "CSV")
+        st.text(f"Quantidade de Registros: {len(df_filtrado):,}")
+        st.text(f"Quantidade de Atributos (colunas): {len(df_filtrado.columns)}")
+        
+        # 4. PRÉ-PROCESSAMENTO
+        st.markdown("### 4. PRÉ-PROCESSAMENTO")
+        pre_processamento = st.text_area("Pré-Processamento (etapas realizadas):",
+            "Foram realizadas as seguintes etapas de pré-processamento:\n"
+            "- Limpeza de dados: remoção de registros duplicados e inconsistências\n"
+            "- Tratamento de valores nulos: imputação de valores faltantes quando necessário\n"
+            "- Conversão de tipos de dados: datas, coordenadas geográficas\n"
+            "- Criação de variáveis derivadas: ano, mês, dia da semana, período do dia\n"
+            "- Filtragem geográfica: restrição aos estados selecionados\n"
+            "- Normalização de nomes: padronização de categorias e nomenclaturas\n\n"
+            "Justificativa: Estas etapas foram necessárias para garantir a qualidade dos dados, consistência nas análises e confiabilidade nos resultados obtidos.")
+        
+        # 5. RESUMO EXECUTIVO
+        st.markdown("### 5. RESUMO EXECUTIVO")
+        resumo_executivo = st.text_area("Resumo Executivo (Introdução):",
+            f"A análise abrange o período de {df_filtrado['ano'].min()} a {df_filtrado['ano'].max()}, identificando que o principal desafio de segurança viária está concentrado nas BRs 101, 116 e 040, com ênfase no tipo 'Colisão Traseira' como o mais frequente. Foram analisados {len(df_filtrado):,} acidentes que resultaram em {int(df_filtrado['mortos'].sum()):,} mortes e {int(df_filtrado['feridos_graves'].sum()):,} feridos graves. Os dados revelam padrões sazonais importantes e concentrações geográficas específicas que demandam atenção prioritária.")
+        
+        # 6. CONCLUSÕES
+        st.markdown("### 6. CONCLUSÕES")
+        conclusoes = st.text_area("Conclusões e Recomendações:",
+            "Principais conclusões e recomendações estratégicas:\n\n"
+            "1. FOCOS CRÍTICOS: Identificar os trechos de rodovias com maiores índices de acidentes e implementar ações específicas\n"
+            "2. TIPOLOGIA: Desenvolver campanhas educativas focadas em colisões traseiras e saídas de pista\n"
+            "3. SAZONALIDADE: Reforçar a fiscalização nos períodos e dias da semana com maior incidência\n"
+            "4. INFRAESTRUTURA: Prioritar investimentos em sinalização e melhorias viárias nos locais críticos\n"
+            "5. MONITORAMENTO: Implementar sistema contínuo de monitoramento e avaliação das ações\n\n"
+            "Recomenda-se a implementação de campanhas de conscientização focadas em direção defensiva e distância de segurança, especialmente nas sextas-feiras e sábados (dias de pico de acidentes).")
+        
+        # 7. REFERÊNCIAS
+        st.markdown("### 7. REFERÊNCIAS")
+        referencias = st.text_area("Referências Bibliográficas:",
+            "Bibliotecas e ferramentas utilizadas:\n"
+            "- Pandas: Manipulação e análise de dados (https://pandas.pydata.org/)\n"
+            "- Matplotlib: Criação de visualizações estáticas (https://matplotlib.org/)\n"
+            "- Seaborn: Visualizações estatísticas avançadas (https://seaborn.pydata.org/)\n"
+            "- Streamlit: Desenvolvimento da aplicação web (https://streamlit.io/)\n"
+            "- Folium: Criação de mapas interativos (https://python-visualization.github.io/folium/)\n"
+            "- Plotly: Gráficos interativos (https://plotly.com/python/)\n\n"
+            "Documentação e tutoriais consultados:\n"
+            "- Documentação oficial das bibliotecas\n"
+            "- Tutoriais de visualização de dados geográficos\n"
+            "- Melhores práticas em análise de dados de transporte")
 
     # Geração de Relatórios
     st.markdown("---")
@@ -1626,27 +1458,47 @@ def main():
             figuras_mapas = {}
 
             try:
-                if selecoes["include_evolution"]: figuras_graficos["evolution"] = analyzer.create_evolution_chart()
-                if selecoes["include_states"]: figuras_graficos["states"] = analyzer.create_states_chart()
-                if selecoes["include_types"]: figuras_graficos["types"] = analyzer.create_accident_types_chart()
-                if selecoes["include_weekday"]: figuras_graficos["weekday"] = analyzer.create_weekday_chart()
+                # Coletar gráficos selecionados
+                if selecoes["include_evolution"]: 
+                    figuras_graficos["evolution"] = analyzer.create_evolution_chart()
+                if selecoes["include_states"]: 
+                    figuras_graficos["states"] = analyzer.create_states_chart()
+                if selecoes["include_types"]: 
+                    figuras_graficos["types"] = analyzer.create_accident_types_chart()
+                if selecoes["include_weekday"]: 
+                    figuras_graficos["weekday"] = analyzer.create_weekday_chart()
 
+                # Preparar metadados
+                metadata = {
+                    'autor': autor,
+                    'data_entrega': data_entrega.strftime('%d/%m/%Y'),
+                    'fonte_dados': fonte_dados,
+                    'titulo_base': titulo_base,
+                    'link_acesso': link_acesso,
+                    'descricao_base': descricao_base,
+                    'contexto_base': contexto_base,
+                    'formato_dados': formato_dados
+                }
+
+                # Gerar relatório
                 report = DOCXReportGenerator()
                 report.build_report(
-                    analyzer,
-                    selecoes,
-                    autor,
-                    resumo_executivo,
-                    insights,
-                    figuras_graficos,
-                    figuras_mapas
+                    analyzer=analyzer,
+                    selections=selecoes,
+                    metadata=metadata,
+                    resumo_executivo=resumo_executivo,
+                    pre_processamento=pre_processamento,
+                    conclusoes=conclusoes,
+                    referencias=referencias,
+                    figuras_graficos=figuras_graficos,
+                    figuras_mapas=figuras_mapas
                 )
                 docx_buffer = report.generate_docx()
 
                 st.download_button(
                     label="📥 Download do Relatório DOCX",
                     data=docx_buffer,
-                    file_name=f"relatorio_executivo_acidentes_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                    file_name=f"relatorio_acidentes_rodoviarios_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
                 st.success("Relatório executivo Word (.docx) gerado com sucesso!")
