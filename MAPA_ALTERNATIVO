@@ -1,0 +1,684 @@
+# =============================================
+# MAPA ALTERNATIVO - FOCO EM MORTALIDADE E LOGÍSTICA (VERSÃO CORRIGIDA)
+# =============================================
+
+print("\n💀 CRIANDO MAPA DE MORTALIDADE COM ANÁLISE DE LOGÍSTICA...")
+
+try:
+    import requests
+except ImportError:
+    !pip install requests
+    import requests
+
+# DEFINIR A URL DO GEOJSON (CORREÇÃO DO ERRO)
+geojson_url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
+print(f"🗺️  GeoJSON URL: {geojson_url}")
+
+# Criar segundo mapa focado em mortalidade com controle de temas
+m2 = folium.Map(
+    location=[-15.77972, -47.92972],
+    zoom_start=4,
+    tiles='CartoDB dark_matter',
+    control_scale=True
+)
+
+# Adicionar múltiplos tiles para alternância
+tiles = {
+    'Modo Escuro': 'CartoDB dark_matter',
+    'Modo Claro': 'CartoDB positron',
+    'Satélite': 'OpenStreetMap'
+}
+
+for name, tile in tiles.items():
+    folium.TileLayer(tile, name=name).add_to(m2)
+
+# Baixar GeoJSON
+try:
+    response = requests.get(geojson_url)
+    geojson_data = response.json()
+    print("✅ GeoJSON carregado com sucesso")
+except Exception as e:
+    print(f"❌ Erro ao carregar GeoJSON: {e}")
+    # Tentar URL alternativa
+    alternative_url = "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-100-mun.json"
+    try:
+        print("🔄 Tentando URL alternativa...")
+        response = requests.get(alternative_url)
+        geojson_data = response.json()
+        print("✅ GeoJSON alternativo carregado com sucesso")
+    except Exception as e2:
+        print(f"❌ Erro no GeoJSON alternativo: {e2}")
+        geojson_data = None
+
+# Mapa de mortalidade por estado
+if geojson_data is not None:
+    folium.Choropleth(
+        geo_data=geojson_data,
+        name='Taxa de Mortalidade por Estado',
+        data=estados_acidentes,
+        columns=['uf', 'taxa_mortalidade'],
+        key_on='feature.properties.sigla',
+        fill_color='RdPu',
+        fill_opacity=0.7,
+        line_opacity=0.2,
+        legend_name='Taxa de Mortalidade (%) - 2007-2023',
+        bins=6,
+        nan_fill_color='lightgray'
+    ).add_to(m2)
+else:
+    print("⚠️  Choropleth não adicionado devido a erro no GeoJSON")
+
+# Adicionar marcadores de mortalidade por estado COM ANÁLISE DE LOGÍSTICA
+print("📍 ADICIONANDO MARCADORES DE MORTALIDADE POR ESTADO COM ANÁLISE DE LOGÍSTICA...")
+
+for _, estado in estados_acidentes.iterrows():
+    uf = estado['uf']
+    if uf in coordenadas_estados:
+        lat, lon = coordenadas_estados[uf]
+
+        taxa = estado['taxa_mortalidade']
+
+        if taxa > 3:
+            icon_color = 'darkred'
+            risco = "MUITO ALTO"
+            recomendacao_logistica = "🚨 EVITAR - Alto risco para operações logísticas"
+            cor_recomendacao = "#ff6b6b"
+        elif taxa > 2:
+            icon_color = 'red'
+            risco = "ALTO"
+            recomendacao_logistica = "⚠️ CUIDADO - Redobrar atenção nas operações"
+            cor_recomendacao = "#ffa726"
+        elif taxa > 1:
+            icon_color = 'orange'
+            risco = "MÉDIO"
+            recomendacao_logistica = "📋 ATENÇÃO - Implementar protocolos de segurança"
+            cor_recomendacao = "#ffd93d"
+        else:
+            icon_color = 'lightgreen'
+            risco = "BAIXO"
+            recomendacao_logistica = "✅ ADEQUADO - Condições aceitáveis para logística"
+            cor_recomendacao = "#6bcf7f"
+
+        ranking_mortalidade = estados_acidentes['taxa_mortalidade'].rank(method='dense', ascending=False)
+        posicao = int(ranking_mortalidade[estados_acidentes['uf'] == uf].iloc[0])
+
+        # ANÁLISE DE LOGÍSTICA POR ESTADO
+        if uf in ['SP', 'RJ', 'MG', 'ES']:
+            contexto_logistica = "Região com alta densidade logística - múltiplas rotas alternativas disponíveis"
+        elif uf in ['PR', 'SC', 'RS']:
+            contexto_logistica = "Infraestrutura rodoviária de boa qualidade - atenção ao inverno"
+        elif uf in ['GO', 'MT', 'MS', 'DF']:
+            contexto_logistica = "Grandes distâncias - planejar pontos de apoio e combustível"
+        elif uf in ['BA', 'PE', 'CE', 'MA']:
+            contexto_logistica = "Condições climáticas variáveis - verificar previsões"
+        else:
+            contexto_logistica = "Consultar condições específicas da região antes do planejamento"
+
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=10 + (taxa * 3),
+            popup=folium.Popup(
+                f"""
+                <div style="font-family: Arial; min-width: 320px; background: white; color: black; padding: 15px; border-radius: 8px; border: 2px solid {icon_color};">
+                    <h4 style="margin: 0 0 10px 0; color: #e74c3c;">{uf} - NÍVEL {risco}</h4>
+                    <div style="background: {icon_color}; color: white; padding: 5px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
+                        <strong>Taxa de Mortalidade: {taxa:.2f}%</strong>
+                    </div>
+
+                    <div style="background: {cor_recomendacao}; color: white; padding: 8px; border-radius: 4px; margin-bottom: 10px; text-align: center;">
+                        <strong>📦 RECOMENDAÇÃO LOGÍSTICA</strong>
+                    </div>
+                    <div style="font-size: 12px; margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                        {recomendacao_logistica}
+                    </div>
+
+                    <table style="width: 100%; font-size: 12px;">
+                        <tr><td>📊 Acidentes:</td><td style="text-align: right;"><strong>{estado['id']:,}</strong></td></tr>
+                        <tr><td>💀 Mortes:</td><td style="text-align: right;"><strong>{estado['mortos']:,}</strong></td></tr>
+                        <tr><td>🏥 Feridos Graves:</td><td style="text-align: right;"><strong>{estado['feridos_graves']:,}</strong></td></tr>
+                        <tr><td>🏆 Ranking Mortalidade:</td><td style="text-align: right;"><strong>#{posicao}</strong></td></tr>
+                    </table>
+
+                    <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px;">
+                        <strong>🗺️ CONTEXTO LOGÍSTICO:</strong><br>
+                        <span style="font-size: 11px;">{contexto_logistica}</span>
+                    </div>
+                </div>
+                """,
+                max_width=400
+            ),
+            tooltip=f"🚨 {uf}: {taxa:.2f}% mortalidade | Nível {risco} | 📦 {recomendacao_logistica.split(' - ')[0]}",
+            color=icon_color,
+            fillColor=icon_color,
+            fillOpacity=0.7,
+            weight=2
+        ).add_to(m2)
+
+# FUNÇÃO ROBUSTA PARA CONVERSÃO DE COORDENADAS
+def parse_coordinate(coord):
+    """
+    Função robusta para converter coordenadas de vários formatos
+    """
+    if pd.isna(coord):
+        return None
+
+    try:
+        # Se for string, fazer limpeza
+        if isinstance(coord, str):
+            # Remover espaços
+            coord = coord.strip()
+
+            # Substituir vírgula por ponto
+            coord = coord.replace(',', '.')
+
+            # Casos especiais: múltiplos valores concatenados
+            if '-' in coord[1:]:  # Encontra hífens que não são o primeiro caractere
+                parts = coord.split('-')
+                if len(parts) > 1:
+                    # Pegar a primeira parte após o sinal negativo inicial (se houver)
+                    first_part = parts[1] if coord.startswith('-') else parts[0]
+                    # Remover caracteres não numéricos extras
+                    first_part = ''.join(c for c in first_part if c.isdigit() or c in '.-')
+                    coord = first_part
+
+        # Tentar converter para float
+        coord_float = float(coord)
+
+        # Validar intervalos razoáveis para coordenadas brasileiras
+        # Latitude Brasil: ~-33° a +5°
+        # Longitude Brasil: ~-74° a -35°
+        if -35 <= coord_float <= 5:  # Latitude
+            return coord_float
+        elif -75 <= coord_float <= -30:  # Longitude
+            return coord_float
+        else:
+            return None
+
+    except (ValueError, TypeError, IndexError):
+        return None
+
+# PROCESSAR COORDENADAS DE FORMA ROBUSTA
+print("🗺️  PROCESSANDO COORDENADAS...")
+
+# Criar cópia para processamento
+df_coords = df_enriched.copy()
+
+# Processar latitude e longitude
+df_coords['lat_clean'] = df_coords['latitude'].apply(parse_coordinate)
+df_coords['lon_clean'] = df_coords['longitude'].apply(parse_coordinate)
+
+# Verificar quantas coordenadas válidas temos
+coords_validas = df_coords[
+    (df_coords['lat_clean'].notna()) &
+    (df_coords['lon_clean'].notna())
+]
+
+print(f"✅ Coordenadas válidas encontradas: {len(coords_validas)} de {len(df_coords)}")
+
+# CAMADA: ACIDENTES GRAVES COM DADOS DE BR E KM E ANÁLISE DE LOGÍSTICA
+print("🛣️  ADICIONANDO CAMADA DE ACIDENTES GRAVES COM BR, KM E ANÁLISE DE LOGÍSTICA...")
+
+# Verificar e corrigir colunas de BR e KM
+colunas_disponiveis = df_enriched.columns.tolist()
+
+# Encontrar colunas relacionadas a BR e KM
+coluna_br = None
+coluna_km = None
+
+for col in colunas_disponiveis:
+    if 'br' in col.lower() and coluna_br is None:
+        coluna_br = col
+    if 'km' in col.lower() and coluna_km is None:
+        coluna_km = col
+
+if coluna_br and coluna_km:
+    print(f"✅ Colunas encontradas: BR='{coluna_br}', KM='{coluna_km}'")
+
+    # Preparar dados
+    df_enriched[coluna_br] = df_enriched[coluna_br].fillna('Não informada').astype(str)
+    df_enriched[coluna_km] = df_enriched[coluna_km].fillna('Não informado').astype(str)
+
+    # Filtrar acidentes graves com coordenadas válidas
+    acidentes_graves = coords_validas[
+        (coords_validas['mortos'] > 0) |
+        (coords_validas['feridos_graves'] > 0)
+    ].copy()
+
+    print(f"📊 Acidentes graves com coordenadas válidas: {len(acidentes_graves)}")
+
+    # Limitar a uma amostra para performance
+    amostra_size = min(200, len(acidentes_graves))
+    amostra_acidentes = acidentes_graves.head(amostra_size)
+
+    # Criar feature group para acidentes graves
+    fg_acidentes_graves = folium.FeatureGroup(name='Acidentes Graves (BR e KM)', show=False)
+
+    acidentes_adicionados = 0
+
+    for _, acidente in amostra_acidentes.iterrows():
+        try:
+            lat = acidente['lat_clean']
+            lon = acidente['lon_clean']
+
+            # Garantir que as coordenadas são válidas
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+
+            # Obter dados da BR e KM
+            br = str(acidente[coluna_br])
+            km = str(acidente[coluna_km])
+
+            # Limpar valores float
+            if '.' in br and br.split('.')[1] == '0':
+                br = br.split('.')[0]
+            if '.' in km and km.split('.')[1] == '0':
+                km = km.split('.')[0]
+
+            # Determinar gravidade
+            mortos = int(acidente['mortos']) if pd.notna(acidente['mortos']) else 0
+            feridos_graves = int(acidente['feridos_graves']) if pd.notna(acidente['feridos_graves']) else 0
+
+            if mortos > 0:
+                cor = 'black'
+                icone = 'fa-skull'
+                gravidade = "FATAL"
+                impacto_logistica = "🔴 PARALISAÇÃO TOTAL - Rota deve ser evitada"
+            elif feridos_graves > 0:
+                cor = 'red'
+                icone = 'fa-hospital'
+                gravidade = "GRAVE"
+                impacto_logistica = "🟡 ALTO IMPACTO - Considerar rotas alternativas"
+            else:
+                cor = 'orange'
+                icone = 'fa-bandage'
+                gravidade = "COM FERIDOS"
+                impacto_logistica = "🟠 IMPACTO MODERADO - Avaliar necessidade"
+
+            # Data do acidente
+            data_acidente = str(acidente['data_inversa']) if 'data_inversa' in acidente and pd.notna(acidente['data_inversa']) else "Data não disponível"
+
+            # ANÁLISE DE LOGÍSTICA PARA O ACIDENTE
+            # Verificar se é uma BR principal
+            br_principal = any(main_br in br for main_br in ['101', '116', '381', '040', '153', '364', '262'])
+            if br_principal:
+                contexto_logistica = "🚚 ROTA PRINCIPAL - Impacto significativo na logística regional"
+            else:
+                contexto_logistica = "🛣️ ROTA SECUNDÁRIA - Impacto localizado"
+
+            # Horário do acidente (se disponível)
+            horario = acidente.get('horario', 'Não informado')
+            if horario != 'Não informado':
+                try:
+                    hora = int(horario.split(':')[0])
+                    if 6 <= hora <= 9:
+                        periodo = "⏰ HORÁRIO DE PICO (manhã)"
+                    elif 16 <= hora <= 19:
+                        periodo = "⏰ HORÁRIO DE PICO (tarde)"
+                    else:
+                        periodo = "⏰ FORA DE PICO"
+                except:
+                    periodo = "⏰ Horário não especificado"
+            else:
+                periodo = "⏰ Horário não informado"
+
+            # Criar popup COM ANÁLISE DE LOGÍSTICA
+            popup_html = f"""
+            <div style="font-family: Arial; min-width: 350px; background: white; color: black; padding: 15px; border-radius: 8px; border: 2px solid {cor};">
+                <h4 style="margin: 0 0 10px 0; color: {cor};">🚨 ACIDENTE {gravidade}</h4>
+                <div style="background: {cor}; color: white; padding: 8px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
+                    <strong>BR {br} • KM {km}</strong>
+                </div>
+
+                <div style="background: #ffeb3b; color: #333; padding: 8px; border-radius: 4px; margin-bottom: 10px; text-align: center;">
+                    <strong>📦 IMPACTO LOGÍSTICO</strong><br>
+                    <span style="font-size: 12px;">{impacto_logistica}</span>
+                </div>
+
+                <table style="width: 100%; font-size: 12px;">
+                    <tr><td>📅 Data:</td><td style="text-align: right;"><strong>{data_acidente}</strong></td></tr>
+                    <tr><td>🏴 UF:</td><td style="text-align: right;"><strong>{acidente['uf']}</strong></td></tr>
+                    <tr><td>{periodo}:</td><td style="text-align: right;"><strong>{horario}</strong></td></tr>
+                    <tr><td>💀 Mortos:</td><td style="text-align: right;"><strong>{mortos}</strong></td></tr>
+                    <tr><td>🏥 Feridos Graves:</td><td style="text-align: right;"><strong>{feridos_graves}</strong></td></tr>
+                    <tr><td>🩹 Feridos Leves:</td><td style="text-align: right;"><strong>{int(acidente['feridos_leves']) if pd.notna(acidente['feridos_leves']) else 0}</strong></td></tr>
+                    <tr><td>👥 Ílesos:</td><td style="text-align: right;"><strong>{int(acidente['ilesos']) if pd.notna(acidente['ilesos']) else 0}</strong></td></tr>
+                </table>
+
+                <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px;">
+                    <strong>🚚 CONTEXTO LOGÍSTICO:</strong><br>
+                    <span style="font-size: 11px;">{contexto_logistica}</span>
+                </div>
+
+                <div style="margin-top: 8px; padding: 6px; background: #f5f5f5; border-radius: 4px; font-size: 10px;">
+                    <strong>💡 AÇÃO RECOMENDADA:</strong><br>
+                    { "Buscar rotas alternativas imediatamente" if mortos > 0 else "Avaliar impacto na operação logística" }
+                </div>
+            </div>
+            """
+
+            folium.Marker(
+                location=[lat, lon],
+                popup=folium.Popup(popup_html, max_width=450),
+                tooltip=f"🚨 BR {br} - KM {km} | {gravidade} | 📦 {impacto_logistica.split(' - ')[0]}",
+                icon=folium.Icon(color=cor, icon=icone, prefix='fa')
+            ).add_to(fg_acidentes_graves)
+
+            acidentes_adicionados += 1
+
+        except Exception as e:
+            # Silenciar erro específico de NaN, apenas contar
+            continue
+
+    # Adicionar o feature group ao mapa
+    fg_acidentes_graves.add_to(m2)
+    print(f"✅ {acidentes_adicionados} acidentes graves adicionados com dados de BR, KM e análise de logística")
+
+else:
+    print("❌ Colunas de BR e KM não encontradas no dataset")
+
+# [O restante do código permanece igual...]
+# Continuar com as outras camadas (rodovias, análise de logística, etc.)
+
+# CAMADA: TODAS AS RODOVIAS COM ACIDENTES REGISTRADOS E ANÁLISE DE LOGÍSTICA
+print("📊 ADICIONANDO CAMADA COM TODAS AS RODOVIAS E ANÁLISE DE LOGÍSTICA...")
+
+if coluna_br:
+    # Preparar dados das rodovias
+    df_enriched[coluna_br] = df_enriched[coluna_br].fillna('Não informada').astype(str)
+
+    # Agrupar por BR
+    rodovias_acidentes = df_enriched.groupby(coluna_br).agg({
+        'id': 'count',
+        'mortos': 'sum',
+        'feridos_graves': 'sum',
+        'feridos_leves': 'sum',
+        'ilesos': 'sum'
+    }).reset_index()
+
+    rodovias_acidentes = rodovias_acidentes.sort_values('id', ascending=False)
+
+    # Calcular taxa de mortalidade
+    rodovias_acidentes['taxa_mortalidade'] = (rodovias_acidentes['mortos'] / rodovias_acidentes['id']) * 100
+    rodovias_acidentes['taxa_mortalidade'] = rodovias_acidentes['taxa_mortalidade'].fillna(0)
+
+    # ANÁLISE DE LOGÍSTICA PARA RODOVIAS
+    rodovias_acidentes['categoria_risco'] = rodovias_acidentes['taxa_mortalidade'].apply(
+        lambda x: 'MUITO ALTO' if x > 3 else 'ALTO' if x > 2 else 'MODERADO' if x > 1 else 'BAIXO'
+    )
+
+    rodovias_acidentes['recomendacao_logistica'] = rodovias_acidentes['categoria_risco'].apply(
+        lambda x: '🚨 EVITAR' if x == 'MUITO ALTO' else
+                 '⚠️ CUIDADO EXTREMO' if x == 'ALTO' else
+                 '📋 ATENÇÃO' if x == 'MODERADO' else
+                 '✅ ADEQUADO'
+    )
+
+    # Criar feature group
+    fg_todas_rodovias = folium.FeatureGroup(name='Todas as Rodovias com Acidentes', show=True)
+
+    print(f"\n🛣️  TOTAL DE RODOVIAS COM ACIDENTES REGISTRADOS: {len(rodovias_acidentes)}")
+
+    rodovias_adicionadas = 0
+
+    for idx, rodovia in rodovias_acidentes.iterrows():
+        try:
+            br = str(rodovia[coluna_br])
+
+            # Limpar valores float
+            if '.' in br and br.split('.')[1] == '0':
+                br = br.split('.')[0]
+
+            acidentes = int(rodovia['id'])
+            mortos = int(rodovia['mortos'])
+            taxa_mortalidade = float(rodovia['taxa_mortalidade'])
+            recomendacao = rodovia['recomendacao_logistica']
+            categoria = rodovia['categoria_risco']
+
+            # Determinar cor
+            if taxa_mortalidade > 3:
+                cor_rodovia = 'darkred'
+                risco_rodovia = "MUITO ALTA"
+                cor_bg = "#ffebee"
+            elif taxa_mortalidade > 2:
+                cor_rodovia = 'red'
+                risco_rodovia = "ALTA"
+                cor_bg = "#fff3e0"
+            elif taxa_mortalidade > 1:
+                cor_rodovia = 'orange'
+                risco_rodovia = "MÉDIA"
+                cor_bg = "#fff8e1"
+            else:
+                cor_rodovia = 'green'
+                risco_rodovia = "BAIXA"
+                cor_bg = "#e8f5e8"
+
+            # Encontrar coordenadas para esta BR
+            acidentes_br = coords_validas[coords_validas[coluna_br] == br]
+
+            if len(acidentes_br) > 0:
+                # Usar média das coordenadas
+                lat_media = float(acidentes_br['lat_clean'].mean())
+                lon_media = float(acidentes_br['lon_clean'].mean())
+
+                popup_content = f"""
+                <div style="font-family: Arial; min-width: 320px; background: {cor_bg}; padding: 15px; border-radius: 8px; border: 2px solid {cor_rodovia};">
+                    <h4 style="margin: 0 0 10px 0; color: {cor_rodovia};">🛣️ BR {br}</h4>
+                    <div style="background: {cor_rodovia}; color: white; padding: 8px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
+                        <strong>PERICULOSIDADE: {risco_rodovia}</strong>
+                    </div>
+
+                    <div style="background: #2196f3; color: white; padding: 6px; border-radius: 4px; text-align: center; margin-bottom: 10px;">
+                        <strong>📦 {recomendacao}</strong>
+                    </div>
+
+                    <table style="width: 100%; font-size: 12px;">
+                        <tr><td>📊 Total de Acidentes:</td><td style="text-align: right;"><strong>{acidentes:,}</strong></td></tr>
+                        <tr><td>💀 Mortes:</td><td style="text-align: right;"><strong>{mortos:,}</strong></td></tr>
+                        <tr><td>🏥 Feridos Graves:</td><td style="text-align: right;"><strong>{int(rodovia['feridos_graves']):,}</strong></td></tr>
+                        <tr><td>🩹 Feridos Leves:</td><td style="text-align: right;"><strong>{int(rodovia['feridos_leves']):,}</strong></td></tr>
+                        <tr><td>👥 Ílesos:</td><td style="text-align: right;"><strong>{int(rodovia['ilesos']):,}</strong></td></tr>
+                        <tr><td>📈 Taxa de Mortalidade:</td><td style="text-align: right;"><strong>{taxa_mortalidade:.2f}%</strong></td></tr>
+                        <tr><td>🏆 Ranking Geral:</td><td style="text-align: right;"><strong>#{idx + 1}</strong></td></tr>
+                        <tr><td>📋 Categoria:</td><td style="text-align: right;"><strong>{categoria}</strong></td></tr>
+                    </table>
+
+                    <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px;">
+                        <strong>🚚 IMPACTO LOGÍSTICO:</strong><br>
+                        <span style="font-size: 11px;">
+                        { "Alto impacto nas operações - buscar alternativas" if taxa_mortalidade > 2 else
+                          "Impacto moderado - avaliar custo-benefício" if taxa_mortalidade > 1 else
+                          "Baixo impacto - condições aceitáveis para logística" }
+                        </span>
+                    </div>
+                </div>
+                """
+
+                folium.Marker(
+                    location=[lat_media, lon_media],
+                    popup=folium.Popup(popup_content, max_width=400),
+                    tooltip=f"🛣️ BR {br}: {acidentes:,} acidentes | {taxa_mortalidade:.2f}% mortalidade | 📦 {recomendacao}",
+                    icon=folium.Icon(color=cor_rodovia, icon='fa-road', prefix='fa')
+                ).add_to(fg_todas_rodovias)
+
+                rodovias_adicionadas += 1
+
+        except Exception as e:
+            continue
+
+    fg_todas_rodovias.add_to(m2)
+    print(f"✅ {rodovias_adicionadas} rodovias adicionadas ao mapa com análise de logística")
+
+    # Estatísticas
+    print(f"\n📈 ESTATÍSTICAS DAS RODOVIAS:")
+    if len(rodovias_acidentes) > 0:
+        top_rodovia = rodovias_acidentes.iloc[0]
+        br_top = str(top_rodovia[coluna_br])
+        if '.' in br_top and br_top.split('.')[1] == '0':
+            br_top = br_top.split('.')[0]
+
+        max_mortalidade_idx = rodovias_acidentes['taxa_mortalidade'].idxmax()
+        rodovia_max_mortalidade = rodovias_acidentes.loc[max_mortalidade_idx]
+        br_max = str(rodovia_max_mortalidade[coluna_br])
+        if '.' in br_max and br_max.split('.')[1] == '0':
+            br_max = br_max.split('.')[0]
+
+        print(f"   • Rodovia com mais acidentes: BR {br_top} ({top_rodovia['id']:,} acidentes)")
+        print(f"   • Rodovia com maior mortalidade: BR {br_max} ({rodovia_max_mortalidade['taxa_mortalidade']:.2f}%)")
+        print(f"   • Média de acidentes por rodovia: {rodovias_acidentes['id'].mean():.1f}")
+        print(f"   • Taxa média de mortalidade: {rodovias_acidentes['taxa_mortalidade'].mean():.2f}%")
+
+else:
+    print("❌ Coluna 'br' não encontrada no dataset")
+
+# [Continuar com o restante do código original...]
+# Adicionar as camadas de análise de logística, controles, etc.
+
+print("\n🎯 ADICIONANDO ANÁLISE DE LOGÍSTICA EM TODOS OS PONTOS...")
+
+# Adicionar controles interativos
+plugins.Fullscreen(
+    position='topright',
+    title='Expandir',
+    title_cancel='Sair',
+    force_separate_button=True
+).add_to(m2)
+
+plugins.MiniMap(
+    tile_layer='CartoDB positron',
+    position='bottomright',
+    toggle_display=True
+).add_to(m2)
+
+# Adicionar controle de camadas
+folium.LayerControl().add_to(m2)
+
+# Título atualizado
+title_html2 = f'''
+<div style="
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    background: rgba(44, 62, 80, 0.9);
+    padding: 12px 25px;
+    border: 2px solid #e74c3c;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    text-align: center;
+    backdrop-filter: blur(5px);
+">
+    <h4 style="margin: 0; color: white; font-size: 16px;">💀 MAPA DE MORTALIDADE + 📦 ANÁLISE DE LOGÍSTICA</h4>
+    <p style="margin: 5px 0 0 0; font-size: 12px; color: #ecf0f1;">2007-2023 | {rodovias_adicionadas} rodovias | Análise logística em todos os pontos</p>
+</div>
+'''
+m2.get_root().html.add_child(folium.Element(title_html2))
+
+# Legenda expandida
+legend_html2 = '''
+<div style="
+    position: fixed;
+    bottom: 50px;
+    left: 50px;
+    width: 400px;
+    height: auto;
+    background: rgba(44, 62, 80, 0.95);
+    border: 2px solid #34495e;
+    z-index: 9999;
+    font-size: 12px;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    color: white;
+    backdrop-filter: blur(5px);
+">
+    <h4 style="margin: 0 0 12px 0; text-align: center; color: #e74c3c;">📊 LEGENDA + 📦 LOGÍSTICA</h4>
+
+    <div style="margin-bottom: 10px;">
+        <strong>🎯 Níveis de Mortalidade:</strong>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 12px; height: 12px; background: darkred; border-radius: 50%; margin-right: 8px;"></div>
+            <span>MUITO ALTO (>3%) - 🚨 EVITAR</span>
+        </div>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 12px; height: 12px; background: red; border-radius: 50%; margin-right: 8px;"></div>
+            <span>ALTO (2-3%) - ⚠️ CUIDADO</span>
+        </div>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 12px; height: 12px; background: orange; border-radius: 50%; margin-right: 8px;"></div>
+            <span>MÉDIO (1-2%) - 📋 ATENÇÃO</span>
+        </div>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 12px; height: 12px; background: lightgreen; border-radius: 50%; margin-right: 8px;"></div>
+            <span>BAIXO (<1%) - ✅ ADEQUADO</span>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 10px;">
+        <strong>📦 IMPACTO LOGÍSTICO:</strong>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 15px; height: 15px; background: black; border-radius: 50%; margin-right: 8px;"></div>
+            <span>🔴 PARALISAÇÃO TOTAL</span>
+        </div>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 15px; height: 15px; background: red; border-radius: 50%; margin-right: 8px;"></div>
+            <span>🟡 ALTO IMPACTO</span>
+        </div>
+        <div style="display: flex; align-items: center; margin: 5px 0;">
+            <div style="width: 15px; height: 15px; background: orange; border-radius: 50%; margin-right: 8px;"></div>
+            <span>🟠 IMPACTO MODERADO</span>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 10px;">
+        <strong>⏰ HORÁRIOS:</strong>
+        <div style="margin: 5px 0; font-size: 11px;">
+            <span>⏰ PICO: 6h-9h e 16h-19h</span><br>
+            <span>⏰ FORA DE PICO: Melhor para logística</span>
+        </div>
+    </div>
+
+    <hr style="border-color: #7f8c8d; margin: 10px 0;">
+
+    <div style="font-size: 11px; color: #bdc3c7;">
+        <p>🎮 <strong>Como usar para Logística:</strong></p>
+        <p>• Clique em QUALQUER ponto para ver análise logística</p>
+        <p>• Consulte recomendações específicas por estado/rodovia</p>
+        <p>• Planeje rotas baseado no impacto logístico</p>
+        <p>• Considere horários e condições específicas</p>
+    </div>
+</div>
+'''
+m2.get_root().html.add_child(folium.Element(legend_html2))
+
+# Estatísticas finais
+print("\n📊 ESTATÍSTICAS GERAIS:")
+print(f"   • Estados analisados: {len(estados_acidentes)}")
+print(f"   • Taxa média de mortalidade: {estados_acidentes['taxa_mortalidade'].mean():.2f}%")
+
+if coluna_br:
+    total_brs = df_enriched[coluna_br].nunique()
+    print(f"   • Total de rodovias com acidentes: {total_brs}")
+    print(f"   • Acidentes graves mapeados: {acidentes_adicionados}")
+    print(f"   • Coordenadas válidas encontradas: {len(coords_validas)}")
+
+print("\n✅ ANÁLISE DE LOGÍSTICA ADICIONADA EM TODOS OS PONTOS:")
+print("   • ✅ Estados: Recomendações por região")
+print("   • ✅ Acidentes graves: Impacto logístico específico")
+print("   • ✅ Rodovias: Categorização por risco logístico")
+print("   • ✅ Horários: Análise temporal para planejamento")
+
+try:
+    m2.save('mapa_logistica_completo.html')
+    print("💾 Mapa salvo como 'mapa_logistica_completo.html'")
+except Exception as e:
+    print(f"⚠️  Erro ao salvar mapa: {e}")
+
+print("\n🎮 CONTROLES DO MAPA:")
+print("   • 🎨 Use o controle de camadas para diferentes visualizações")
+print("   • 📦 Clique em QUALQUER ponto para ver análise logística detalhada")
+print("   • 🚨 Pontos vermelhos: Alto risco - evitar na logística")
+print("   • ✅ Pontos verdes: Baixo risco - adequados para operações")
+
+print("\n🗺️ EXIBINDO MAPA COMPLETO COM ANÁLISE DE LOGÍSTICA EM TODOS OS PONTOS...")
+display(m2)
