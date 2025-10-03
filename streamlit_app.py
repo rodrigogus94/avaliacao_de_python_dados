@@ -1388,7 +1388,7 @@ def main():
     analyzer = DataAnalyzer(df_filtrado, estados_coords)
 
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["📊 Análises Gráficas", "🗺️ Mapa e Resumo", "📈 Métricas e Tabelas", "📋 Resumo Executivo"]
+        ["📊 Análises Gráficas", "🗺️ Mapa", "📈 Métricas e Tabelas", "📋 Resumo Executivo"]
     )
 
     with tab1:
