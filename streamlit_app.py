@@ -221,7 +221,7 @@ class DOCXReportGenerator:
         """Constrói o relatório DOCX expandido"""
 
         # ==================== CAPA E IDENTIFICAÇÃO ====================
-        self.add_heading("RELATÓRIO DE ANÁLISE DE ACIDENTES RODOVIÁRIOS", 0)
+        self.add_heading("RELATÓRIO DE SISTEMA DE ANÁLISE E LOGÍSTICA DE TRÂNSITO - SALT", 0)
         self.add_paragraph(" ")
         self.add_paragraph(" ")
 
@@ -1025,7 +1025,7 @@ class DataAnalyzer:
 # ==============================================================================
 def main():
     st.set_page_config(
-        page_title="Análise de Acidentes Rodoviários",
+        page_title="Sistema de Análise e Logística de Trânsito - SALT",
         page_icon="🚗",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -1082,7 +1082,7 @@ def main():
         }
         </style>
     """, unsafe_allow_html=True)
-    st.markdown('<h1 class="main-header">🚗 Análise de Acidentes Rodoviários</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🚗 Sistema de Análise e Logística de Trânsito - SALT</h1>', unsafe_allow_html=True)
 
     # Carregar dados
     df, estados_coords = load_data()
@@ -1282,7 +1282,7 @@ def main():
             try:
                 tabela_metrics = analyzer.create_metrics_table()
                 if not tabela_metrics.empty:
-                    st.dataframe(tabela_metrics, use_container_width=True)
+                    st.dataframe(tabela_metrics, width=True)
                 else:
                     st.info("⚠️ Não há dados disponíveis para gerar a tabela de métricas.")
             except Exception as e:
@@ -1293,7 +1293,7 @@ def main():
             try:
                 tabela_highways = analyzer.create_highways_table()
                 if not tabela_highways.empty:
-                    st.dataframe(tabela_highways, use_container_width=True)
+                    st.dataframe(tabela_highways, width=True)
                     
                     st.markdown("#### 📋 Análise das Rodovias Mais Críticas")
                     
@@ -1511,7 +1511,7 @@ def main():
     st.markdown(
         """
         <div style="text-align: center; color: #666; font-size: 12px;">
-        <p>🚗 Análise de Acidentes Rodoviários - Desenvolvido para auxiliar na tomada de decisões estratégicas</p>
+        <p>🚗 Sistema de Análise e Logística de Trânsito - SALT - Desenvolvido para auxiliar na tomada de decisões estratégicas</p>
         <p>⚠️ Dados simulados para fins de demonstração | 📅 Período: {}-{} | 📊 Total de registros: {:,}</p>
         </div>
         """.format(
