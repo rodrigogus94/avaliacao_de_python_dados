@@ -16,6 +16,7 @@ from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 # ==================================
 
+
 import folium
 from folium import plugins
 from streamlit_folium import folium_static
@@ -572,7 +573,7 @@ class DataAnalyzer:
         return m
 
     # FUNÇÃO DE MAPA COMPLETO ATUALIZADA COM O CÓDIGO DO MAPA.PY E MARCADORES POSITIVOS
-    def create_complete_logistics_map(_self, df_filtrado, map_height=600):
+    def create_complete_logistics_map(_self, df_filtrado, sample_size=1000, map_height=600): # Adicionado sample_size
         """Mapa completo com todas as funcionalidades de logística e análise, baseado no Mapa.py avançado"""
 
         # Mapeamento de variáveis
@@ -593,13 +594,17 @@ class DataAnalyzer:
         m2 = folium.Map(
             location=[-15.77972, -47.92972],
             zoom_start=4,
-            tiles="CartoDB dark_matter", # Tile padrão
+            tiles="Esri_WorldImagery", # Tile padrão
             control_scale=True,
             prefer_canvas=True
         )
 
         # 2. Adicionar múltiplos temas com Atribuição (Attr)
         tiles_config = {
+            "Satélite (Real)": {
+                "url": "Esri_WorldImagery",
+                "attr": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+            },
             "Modo Claro (CartoDB)": {
                 "url": "CartoDB positron",
                 "attr": 'Tiles by CartoDB, under CC BY 3.0. Data by OpenStreetMap, under ODbL.'
@@ -624,6 +629,12 @@ class DataAnalyzer:
                 name=name, 
                 attr=config['attr']
             ).add_to(m2)
+            
+        # <<< NOVO: INICIALIZAÇÃO DOS FEATURE GROUPS E CLUSTER >>>
+        # Grupo para o Mapa de Calor
+        fg_heatmap = folium.FeatureGroup(name='🔥 Mapa de Calor (Densidade)', show=False)
+        # Grupo para os marcadores de estado agrupados (Cluster)
+        marker_cluster_estados = plugins.MarkerCluster(name="📍 Estados (Agrupados)").add_to(m2)
 
 
         # 3. Choropleth Map 
@@ -653,11 +664,28 @@ class DataAnalyzer:
                 line_opacity=0.2,
                 legend_name='Taxa de Mortalidade (%) - 2007-2023',
                 bins=6,
-                nan_fill_color='lightgray'
+                nan_fill_color='lightgray',
+                show=False # Inicia desativado para não poluir
             ).add_to(m2)
+            
+        # <<< NOVO: LÓGICA DO MAPA DE CALOR (HEATMAP) DO MAPA BÁSICO >>>
+        locais = df_filtrado[["latitude", "longitude"]].dropna()
+        if len(locais) > 0:
+            heat_data = [
+                [row["latitude"], row["longitude"]]
+                for _, row in locais.sample(min(sample_size, len(locais))).iterrows()
+            ]
+            plugins.HeatMap(
+                heat_data, 
+                radius=15, 
+                blur=10, 
+                max_zoom=8,
+                gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}
+            ).add_to(fg_heatmap)
+        fg_heatmap.add_to(m2)
 
 
-        # 4. Marcadores de Mortalidade por Estado (CircleMarker)
+        # 4. Marcadores de Mortalidade por Estado (CircleMarker e agora também MarkerCluster)
         ranking_mortalidade = estados_acidentes['taxa_mortalidade'].rank(method='dense', ascending=False)
         
         # 5. Adicionar Feature Group para Rotas Seguras (Novo ponto 2)
@@ -669,6 +697,35 @@ class DataAnalyzer:
                 lat, lon = coordenadas_estados[uf]
                 taxa = estado["taxa_mortalidade"] if pd.notna(estado["taxa_mortalidade"]) else 0
                 posicao = int(ranking_mortalidade[estados_acidentes['uf'] == uf].iloc[0])
+
+                # <<< NOVO: LÓGICA DO MARKERCLUSTER (MAPA BÁSICO) SENDO ADICIONADA AQUI >>>
+                if taxa > 2:
+                    cor_cluster = "red"
+                    icon_type_cluster = "exclamation-triangle"
+                elif taxa > 1:
+                    cor_cluster = "orange"
+                    icon_type_cluster = "warning"
+                else:
+                    cor_cluster = "green"
+                    icon_type_cluster = "info-sign"
+
+                popup_text_cluster = f"""
+                <div style="font-family: Arial; width: 250px;">
+                    <h4 style="color: {cor_cluster}; margin-bottom: 10px;">{uf}</h4>
+                    <p><b>Acidentes:</b> {estado['id']:,}</p>
+                    <p><b>Mortos:</b> {estado['mortos']:,}</p>
+                    <p><b>Taxa de Mortalidade:</b> {taxa:.1f}%</p>
+                    <p><b>Feridos Graves:</b> {estado['feridos_graves']:,}</p>
+                </div>
+                """
+                folium.Marker(
+                    [lat, lon],
+                    popup=folium.Popup(popup_text_cluster, max_width=300),
+                    tooltip=f"📍 {uf}: {estado['id']} acidentes | {taxa:.1f}% mortalidade",
+                    icon=folium.Icon(color=cor_cluster, icon=icon_type_cluster, prefix='fa'),
+                ).add_to(marker_cluster_estados)
+                # <<< FIM DA LÓGICA DO MARKERCLUSTER >>>
+
 
                 if taxa > 3:
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "darkred", "MUITO ALTO", "🚨 EVITAR - Alto risco para operações logísticas", "#ff6b6b"
@@ -700,7 +757,6 @@ class DataAnalyzer:
                         icon=folium.Icon(color='green', icon='fa-thumbs-up', prefix='fa'),
                     ).add_to(fg_rotas_seguras)
                     
-                    # Para os demais, continua a lógica original (CircleMarker)
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "lightgreen", "BAIXO", "✅ ADEQUADO - Condições aceitáveis para logística", "#6bcf7f"
                 else: # Taxa entre 0 e 1% (Baixo Risco)
                     icon_color, risco, recomendacao_logistica, cor_recomendacao = "lightgreen", "BAIXO", "✅ ADEQUADO - Condições aceitáveis para logística", "#6bcf7f"
@@ -745,20 +801,23 @@ class DataAnalyzer:
                 </div>
                 """
 
+                # Crie um FeatureGroup para os Círculos, para poder ligar/desligar
+                fg_circulos_risco = folium.FeatureGroup(name='⭕ Estados (Círculos de Risco)', show=True).add_to(m2)
                 folium.CircleMarker(
                     location=[lat, lon],
                     radius=10 + (taxa * 3),
                     popup=folium.Popup(popup_text, max_width=400),
-                    tooltip=f"🚨 {uf}: {taxa:.2f}% mortalidade | Nível {risco} | 📦 {recomendacao_logistica.split(' - ')[0]}",
+                    tooltip=f"⭕ {uf}: {taxa:.2f}% mortalidade | Nível {risco} | 📦 {recomendacao_logistica.split(' - ')[0]}",
                     color=icon_color,
                     fillColor=icon_color,
                     fillOpacity=0.7,
                     weight=2
-                ).add_to(m2)
+                ).add_to(fg_circulos_risco)
         
-        fg_rotas_seguras.add_to(m2) # Adicionar a camada de Rotas Seguras ao mapa
+        fg_rotas_seguras.add_to(m2)
 
 
+        # ... (O restante do código para Acidentes Graves e Todas as Rodovias permanece o mesmo) ...
         # 6. Processar Coordenadas e Adicionar Acidentes Graves (Marker)
         # O parse_coordinate é uma função global, acessível aqui.
         df_coords = df_enriched.copy()
@@ -994,10 +1053,14 @@ class DataAnalyzer:
         # 8. Adicionar controles interativos 
         plugins.Fullscreen(position="topright").add_to(m2)
         plugins.MiniMap(tile_layer="CartoDB positron", position="bottomright").add_to(m2)
-        # O LayerControl irá mostrar as 3 camadas (Choropleth, Rodovias, Acidentes Graves) + Rotas Seguras
+        # <<< NOVO: ADIÇÃO DOS PLUGINS DO MAPA BÁSICO >>>
+        plugins.LocateControl(position="topright").add_to(m2)
+        plugins.MeasureControl(position="topleft").add_to(m2)
+        
+        # O LayerControl irá mostrar TODAS as camadas
         folium.LayerControl(collapsed=False).add_to(m2)
 
-        # 9. Título e Legenda HTML (Atualizado para incluir Rotas Seguras)
+        # 9. Título e Legenda HTML (permanecem os mesmos)
         title_html2 = f'''
         <div style="
             position: fixed;
@@ -1195,41 +1258,33 @@ def main():
 
     st.sidebar.title("⚙️ Configurações e Filtros")
     
-    # df_filtrado_base agora é o df original (completo) - REMOÇÃO DO FILTRO TEMPORAL GERAL
     df_filtrado_base = df.copy() 
     
     anos_disponiveis = sorted(df_filtrado_base['ano'].unique())
     meses_disponiveis = sorted(df_filtrado_base['mes'].unique())
     tipos_acidente = df_filtrado_base['tipo_acidente'].unique().tolist()
     
-    # --- FILTROS DE REFINAMENTO ---
-    
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔍 Refinamento de Data e Hora")
     
-    # Filtro por Ano (multiselect)
     st.sidebar.markdown("**Seleção de Anos**")
     todos_anos = st.sidebar.checkbox("Selecionar Todos os Anos", value=True, key='chk_anos')
     anos_selecionados = anos_disponiveis if todos_anos else st.sidebar.multiselect("Selecione os anos:", options=anos_disponiveis, default=anos_disponiveis, key='multi_anos')
     
-    # Filtro por Mês 
     st.sidebar.markdown("**Seleção de Meses**")
     todos_meses = st.sidebar.checkbox("Selecionar Todos os Meses", value=True, key='chk_meses')
     meses_selecionados = meses_disponiveis if todos_meses else st.sidebar.multiselect("Selecione os meses:", options=meses_disponiveis, default=meses_disponiveis, format_func=lambda x: f"{x:02d}", key='multi_meses')
     
-    # Filtro por Estado (UF)
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🏛️ Refinamento Geográfico")
     todos_estados = st.sidebar.checkbox("Selecionar Todos os Estados", value=True, key='chk_estados')
     estados_selecionados = list(estados_coords.keys()) if todos_estados else st.sidebar.multiselect("Selecione os estados:", options=list(estados_coords.keys()), default=list(estados_coords.keys()), key='multi_estados')
     
-    # Filtro por Tipo de Acidente
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🚨 Refinamento de Tipos de Acidente")
     todos_tipos = st.sidebar.checkbox("Selecionar Todos os Tipos", value=True, key='chk_tipos')
     tipos_selecionados = tipos_acidente if todos_tipos else st.sidebar.multiselect("Selecione os tipos de acidente:", options=tipos_acidente, default=tipos_acidente, key='multi_tipos')
 
-    # Aplicar TODOS os filtros
     df_filtrado = df_filtrado_base[
         (df_filtrado_base['ano'].isin(anos_selecionados)) & 
         (df_filtrado_base['mes'].isin(meses_selecionados)) & 
@@ -1246,12 +1301,9 @@ def main():
     st.sidebar.markdown("---")
     autor = st.sidebar.text_input("Autor:", "Equipe de Análise")
     
-    # Configurações de visualização
-    altura_mapa_basico = st.sidebar.slider("Altura do Mapa Básico", 400, 800, 500)
     altura_mapa_completo = st.sidebar.slider("Altura do Mapa Completo", 500, 1000, 600)
     amostra_mapa = st.sidebar.slider("Amostra para Heatmap", 500, 2000, 1000)
     
-    # Definição correta do dicionário 'selecoes' a partir de checkboxes no sidebar
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📄 Conteúdo do Relatório DOCX")
     
@@ -1261,7 +1313,7 @@ def main():
     include_weekday = st.sidebar.checkbox("Incluir Padrão Semanal", value=True, key='rep_weekday')
     include_highways = st.sidebar.checkbox("Incluir Ranking de Rodovias", value=True, key='rep_highways')
     include_metrics = st.sidebar.checkbox("Incluir Tabela de Métricas", value=True, key='rep_metrics')
-    include_map = st.sidebar.checkbox("Incluir Ref. ao Mapa Básico", value=True, key='rep_map')
+    # Removido include_map pois não há mais mapa básico
     include_complete_map = st.sidebar.checkbox("Incluir Ref. ao Mapa Completo", value=True, key='rep_complete_map')
     
     selecoes = {
@@ -1271,16 +1323,15 @@ def main():
         "include_weekday": include_weekday,
         "include_highways": include_highways,
         "include_metrics": include_metrics,
-        "include_map": include_map,
+        "include_map": False, # Desativado permanentemente
         "include_complete_map": include_complete_map,
     }
 
-    # Inicializar analyzer com dados filtrados (CORRETO)
     analyzer = DataAnalyzer(df_filtrado, estados_coords)
 
-    # Abas para organização
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["📊 Análises Gráficas", "🗺️ Mapas Básicos", "🔄 Mapas Completos", "📈 Métricas e Tabelas", "📋 Resumo Executivo"]
+    # <<< ALTERAÇÃO 1: Removida a aba "Mapas Básicos" e a variável tab2 >>>
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["📊 Análises Gráficas", "🗺️ Mapa", "📈 Métricas e Tabelas", "📋 Resumo Executivo"]
     )
 
     with tab1:
@@ -1309,36 +1360,24 @@ def main():
                 fig = analyzer.create_weekday_chart()
                 st.pyplot(fig)
 
+    # <<< ALTERAÇÃO 2: Bloco "with tab2:" (mapa básico) foi COMPLETAMENTE REMOVIDO >>>
 
-    with tab2:
-        st.markdown("## 🗺️ Mapas Interativos Básicos")
-
-        if selecoes["include_map"]:
-            st.markdown("### 🌎 Mapa de Calor - Visão Geral")
-            
-            with st.spinner("Gerando mapa de calor..."):
-                mapa = analyzer.create_interactive_map(
-                    df_filtrado,
-                    sample_size=amostra_mapa, 
-                    map_height=altura_mapa_basico
-                )
-                folium_static(mapa, width=1000, height=altura_mapa_basico)
-
-    with tab3:
-        st.markdown("## 🔄 Mapas Completos com Análise de Logística")
+    # <<< ALTERAÇÃO 3: As abas seguintes foram renomeadas (tab3->tab2, tab4->tab3, etc.) >>>
+    with tab2: # Antiga tab3
+        st.markdown("## 🗺️ Mapa Unificado com Análise de Logística")
 
         if selecoes["include_complete_map"]:
             st.markdown("### 📦 Mapa Completo de Logística e Mortalidade (Avançado)")
             
-            with st.spinner("Gerando mapa completo de logística..."):
-                # AQUI É ONDE A FUNÇÃO ATUALIZADA É CHAMADA
+            with st.spinner("Gerando mapa unificado..."):
                 mapa_completo = analyzer.create_complete_logistics_map(
                     df_filtrado,
+                    sample_size=amostra_mapa,
                     map_height=altura_mapa_completo
                 )
                 folium_static(mapa_completo, width=1000, height=altura_mapa_completo)
 
-    with tab4:
+    with tab3: # Antiga tab4
         st.markdown("## 📈 Métricas e Análises Consolidadas")
 
         if selecoes["include_metrics"]:
@@ -1351,7 +1390,7 @@ def main():
             tabela = analyzer.create_highways_table()
             st.dataframe(tabela, use_container_width=True)
 
-    with tab5:
+    with tab4: # Antiga tab5
         st.markdown("## 📋 Resumo Executivo")
         
         resumo_executivo = st.text_area(
@@ -1364,9 +1403,7 @@ def main():
             "Recomenda-se a implementação de campanhas de conscientização focadas em direção defensiva e distância de segurança, especialmente nas sextas-feiras e sábados (dias de pico de acidentes)."
         )
 
-    # ==============================================================================
-    # GERADOR DE RELATÓRIOS DOCX
-    # ==============================================================================
+    # Geração de Relatórios (sem alterações aqui)
     st.markdown("---")
     st.markdown("## 📄 Gerar Relatório Executivo Word (DOCX)")
 
@@ -1376,13 +1413,11 @@ def main():
             figuras_mapas = {}
             
             try:
-                # Coletar gráficos para DOCX (Apenas se a seleção estiver em True)
                 if selecoes["include_evolution"]: figuras_graficos["evolution"] = analyzer.create_evolution_chart()
                 if selecoes["include_states"]: figuras_graficos["states"] = analyzer.create_states_chart()
                 if selecoes["include_types"]: figuras_graficos["types"] = analyzer.create_accident_types_chart()
                 if selecoes["include_weekday"]: figuras_graficos["weekday"] = analyzer.create_weekday_chart()
                 
-                # Gerar DOCX (Substituindo o PDF)
                 report = DOCXReportGenerator()
                 report.build_report(
                     analyzer, 
@@ -1404,7 +1439,6 @@ def main():
                 st.success("Relatório executivo Word (.docx) gerado com sucesso!")
                 
             except Exception as e:
-                # Mantenha o tratamento de erro
                 st.error(f"Erro ao gerar relatório: {str(e)}")
 
 
